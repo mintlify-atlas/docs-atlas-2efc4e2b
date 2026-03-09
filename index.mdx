@@ -1,97 +1,113 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: "Text Shot"
+description: "Lightning-fast screenshot to text conversion with on-device OCR for macOS"
 ---
 
-## Setting up
+<img
+  className="block dark:hidden"
+  src="/images/hero-light.png"
+  alt="Text Shot Hero"
+/>
+<img
+  className="hidden dark:block"
+  src="/images/hero-dark.png"
+  alt="Text Shot Hero"
+/>
 
-Get your documentation site up and running in minutes.
+## Welcome to Text Shot
 
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
+Text Shot is a lightweight macOS menu bar application that transforms screenshots into editable text instantly. Capture any screen region with a keyboard shortcut, and Text Shot extracts the text using Apple's on-device Vision framework—no internet connection required.
 
-## Make it yours
-
-Design a docs site that looks great and empowers your users.
-
-<Columns cols={2}>
+<CardGroup cols={2}>
   <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
+    title="Quick Installation"
+    icon="download"
+    href="/installation"
   >
-    Edit your docs locally and preview them in real time.
+    Download and install Text Shot in under a minute
   </Card>
   <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
+    title="Get Started"
+    icon="rocket"
+    href="/quickstart"
   >
-    Customize the design and colors of your site to match your brand.
-  </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
+    Learn the basics and start capturing text immediately
   </Card>
   <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
+    title="Features Overview"
+    icon="sparkles"
+    href="/guide/features"
   >
-    Auto-generate API documentation from OpenAPI specifications.
-  </Card>
-</Columns>
-
-## Create beautiful pages
-
-Everything you need to create world-class documentation.
-
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
+    Explore all the capabilities Text Shot offers
   </Card>
   <Card
-    title="Code samples"
+    title="Build from Source"
     icon="code"
-    href="/essentials/code"
+    href="/developers/building-from-source"
   >
-    Add sample code to demonstrate how to use your product.
+    Compile and customize Text Shot yourself
+  </Card>
+</CardGroup>
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="100% Local Processing" icon="shield-check">
+    All OCR happens on your device using Apple Vision. Zero network calls, zero data collection.
+  </Card>
+  <Card title="Keyboard-First Workflow" icon="keyboard">
+    Trigger captures with customizable global hotkeys. Default: Cmd + Shift + 2
+  </Card>
+  <Card title="Instant Clipboard Copy" icon="clipboard">
+    Extracted text appears on your clipboard immediately—paste anywhere
+  </Card>
+  <Card title="Lightweight & Fast" icon="gauge-high">
+    ~2 MB application size with near-instant OCR processing
+  </Card>
+  <Card title="Privacy by Design" icon="lock">
+    No accounts, no telemetry, no runtime network access
+  </Card>
+  <Card title="Native macOS Experience" icon="apple">
+    Built with Swift and SwiftUI for seamless macOS integration
+  </Card>
+</CardGroup>
+
+## How It Works
+
+<Steps>
+  <Step title="Press your hotkey">
+    Use your configured keyboard shortcut (default: Cmd + Shift + 2) to activate capture mode
+  </Step>
+  <Step title="Select the region">
+    Drag to select any area of your screen containing text
+  </Step>
+  <Step title="Text extracted automatically">
+    Text Shot uses Apple Vision to recognize text and copies it to your clipboard
+  </Step>
+  <Step title="Paste anywhere">
+    The extracted text is ready to paste into any application
+  </Step>
+</Steps>
+
+## System Requirements
+
+<Note>
+Text Shot requires macOS 13 (Ventura) or later and Screen Recording permission to capture screen regions.
+</Note>
+
+<CardGroup cols={2}>
+  <Card
+    title="User Guide"
+    icon="book-open"
+    href="/guide/usage"
+  >
+    Learn advanced usage patterns and tips
   </Card>
   <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
+    title="Troubleshooting"
+    icon="wrench"
+    href="/reference/troubleshooting"
   >
-    Display images and other media.
+    Resolve common issues and permission problems
   </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
-
-## Need inspiration?
-
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+</CardGroup>

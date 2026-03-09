@@ -1,0 +1,602 @@
+---
+title: Keyboard Shortcuts
+description: Master Text Shot's keyboard shortcuts and hotkey customization
+---
+
+Text Shot is designed for keyboard-driven workflows. This page covers the global hotkey system, customization options, and best practices for choosing shortcuts.
+
+## Default Hotkey
+
+Text Shot ships with one global keyboard shortcut:
+
+<Card title="Capture Text from Screen" icon="camera">
+  **`⌘⇧2`** (Command + Shift + 2)
+  
+  Triggers interactive screen region selection and OCR extraction.
+</Card>
+
+### Why `⌘⇧2`?
+
+This default follows macOS screenshot conventions:
+
+| Shortcut | Function | Owner |
+|----------|----------|-------|
+| `⌘⇧3` | Capture entire screen | macOS |
+| `⌘⇧4` | Capture selected region | macOS |
+| `⌘⇧5` | Screenshot controls | macOS |
+| **`⌘⇧2`** | **Capture text from screen** | **Text Shot** |
+
+<Info>
+The pattern is memorable and sits naturally alongside macOS's built-in screenshot shortcuts.
+</Info>
+
+### How It Works
+
+The global hotkey is registered using the KeyboardShortcuts framework:
+
+```swift
+extension KeyboardShortcuts.Name {
+    static let globalCaptureHotkey = Self("globalCaptureHotkey")
+}
+
+// In HotkeyBindingController.swift
+KeyboardShortcuts.onKeyDown(for: recorderName) { [weak self] in
+    self?.onHotkeyPressed?()
+}
+```
+
+From `HotkeyManager.swift:6-8` and `HotkeyBindingController.swift:23-25`, this registers a system-wide hotkey that works from any application.
+
+<Note>
+Global hotkeys work even when Text Shot is in the background or minimized. No need to switch to the app first.
+</Note>
+
+## Customizing the Hotkey
+
+### Using the Shortcut Recorder
+
+Text Shot includes a keyboard shortcut recorder in Settings:
+
+<Steps>
+  <Step title="Open Settings">
+    Launch Text Shot and open the Settings window.
+  </Step>
+  
+  <Step title="Focus the hotkey field">
+    Click the keyboard shortcut field (shows current hotkey, e.g., "⇧⌘2").
+  </Step>
+  
+  <Step title="Press your desired shortcut">
+    While focused, press the key combination you want:
+    - Hold modifier keys (⌘, ⌥, ⌃, ⇧)
+    - Press the main key (letter, number, function key, etc.)
+    - Release all keys
+  </Step>
+  
+  <Step title="Shortcut validates and applies">
+    If valid, the new shortcut applies immediately. If invalid, you'll see an error and your previous shortcut is restored.
+  </Step>
+</Steps>
+
+<Tip>
+You can test your new hotkey immediately - close Settings and press it from any app to trigger a capture.
+</Tip>
+
+### Recorder Implementation
+
+The shortcut recorder is implemented in `ShortcutRecorder.swift:4-26`:
+
+```swift
+KeyboardShortcuts.Recorder(
+    shortcut: $shortcut,
+    onChange: { newValue in
+        do {
+            let applied = try hotkeyController.apply(shortcut: newValue)
+            onError("")
+            onWarning(HotkeyManager.macOS15OptionGuardrailMessage(for: applied))
+        } catch {
+            shortcut = hotkeyController.activeShortcut  // Restore previous
+            onWarning(nil)
+            onError(error.localizedDescription)
+        }
+    }
+)
+```
+
+This provides:
+- Live validation as you type
+- Immediate application of valid shortcuts
+- Error feedback for invalid combinations
+- Warning messages for potentially problematic shortcuts
+
+### Clearing the Hotkey
+
+To temporarily disable the global hotkey:
+
+1. Focus the shortcut recorder field
+2. Press **Delete** or **Backspace**
+3. The field shows "Not set"
+
+<Warning>
+With no hotkey set, you can't trigger captures. You must set a new hotkey to restore functionality.
+</Warning>
+
+## Hotkey Requirements and Validation
+
+### Modifier Key Rules
+
+Text Shot enforces specific rules for valid hotkeys:
+
+#### Rule 1: Must Include Modifier (Usually)
+
+Most shortcuts require at least one modifier key:
+
+- ⌘ Command
+- ⌥ Option  
+- ⌃ Control
+- ⇧ Shift
+
+```swift
+static func validateNoModifierRule(_ shortcut: AppHotkeyShortcut?) throws {
+    guard isAllowedNoModifierShortcut(shortcut) || hasAnyModifier(shortcut) else {
+        throw HotkeyApplyError.invalidShortcut
+    }
+}
+```
+
+From `HotkeyManager.swift:50-58`, this prevents shortcuts like just pressing "A" or "1".
+
+<Warning>
+**Invalid**: `A`, `2`, `Space`, `Return`
+
+**Valid**: `⌘A`, `⌃2`, `⇧Space`, `⌘⇧Return`
+</Warning>
+
+#### Rule 2: Function Keys Are Exempt
+
+Function keys (F1-F20) **can be used without modifiers**:
+
+```swift
+static func isFunctionKey(_ shortcut: AppHotkeyShortcut) -> Bool {
+    let fKeyRawValues: Set<Int> = [
+        Int(kVK_F1), Int(kVK_F2), Int(kVK_F3), Int(kVK_F4), Int(kVK_F5),
+        Int(kVK_F6), Int(kVK_F7), Int(kVK_F8), Int(kVK_F9), Int(kVK_F10),
+        Int(kVK_F11), Int(kVK_F12), Int(kVK_F13), Int(kVK_F14), Int(kVK_F15),
+        Int(kVK_F16), Int(kVK_F17), Int(kVK_F18), Int(kVK_F19), Int(kVK_F20)
+    ]
+    return fKeyRawValues.contains(shortcut.carbonKeyCode)
+}
+```
+
+From `HotkeyManager.swift:92-101`.
+
+<Info>
+**Valid function key shortcuts**: `F1`, `F13`, `F20`, `⌘F5`, `⌥⇧F12`
+</Info>
+
+### Validation Errors
+
+If you attempt an invalid shortcut, you'll see:
+
+> **Unsupported shortcut. Use one or more modifiers, or an F-key.**
+
+This error comes from `HotkeyApplyError.invalidShortcut` in `HotkeyManager.swift:31-40`.
+
+## macOS 15+ Option Key Warning
+
+Text Shot includes a guardrail for Option-only shortcuts on macOS 15:
+
+```swift
+static func macOS15OptionGuardrailMessage(for shortcut: AppHotkeyShortcut?) -> String? {
+    let modifiers = shortcut.modifiers.intersection([.command, .option, .control, .shift])
+    guard modifiers.contains(.option) else {
+        return nil  // No Option, no warning
+    }
+    
+    let hasCommandOrControl = modifiers.contains(.command) || modifiers.contains(.control)
+    guard !hasCommandOrControl else {
+        return nil  // Option + Command or Control is fine
+    }
+    
+    return "Option-only shortcuts may not fire reliably on macOS 15. Prefer adding Command or Control."
+}
+```
+
+From `HotkeyManager.swift:60-76`.
+
+### When This Warning Appears
+
+| Shortcut | Warning? | Reason |
+|----------|----------|--------|
+| `⌥A` | ⚠️ Yes | Option alone |
+| `⌥⇧2` | ⚠️ Yes | Option + Shift only |
+| `⌘⌥A` | ✅ No | Includes Command |
+| `⌃⌥2` | ✅ No | Includes Control |
+| `⌘⇧A` | ✅ No | No Option key |
+
+<Accordion title="Why this warning exists">
+macOS 15 (Sequoia) introduced changes to how global hotkeys are processed. Some users have reported that Option-only shortcuts (without Command or Control) don't fire reliably in certain configurations.
+
+The warning is a guardrail - shortcuts still work, but you may want to choose a more reliable combination.
+
+See Apple's documentation on `CGEventTapCreate` and input monitoring for technical details.
+</Accordion>
+
+<Tip>
+If you encounter issues with Option-only shortcuts, add Command or Control to make them more reliable.
+</Tip>
+
+## Recommended Shortcut Patterns
+
+### Command + Shift Combinations
+
+<CodeGroup>
+```text Standard Pattern
+⌘⇧2 (default)
+⌘⇧T
+⌘⇧X
+⌘⇧S
+```
+
+```text Why it works
+- Standard macOS pattern
+- Easy to remember
+- Muscle memory friendly
+- Few conflicts with typing
+```
+</CodeGroup>
+
+### Control + Shift Combinations
+
+<CodeGroup>
+```text Alternative Pattern  
+⌃⇧2
+⌃⇧T
+⌃⇧X
+⌃⇧S
+```
+
+```text Why it works
+- Good if Command+Shift is taken
+- Less common in Mac apps
+- No conflicts with text editing
+```
+</CodeGroup>
+
+### Command + Option Combinations
+
+<CodeGroup>
+```text Power User Pattern
+⌘⌥2
+⌘⌥T  
+⌘⌥X
+⌘⌥S
+```
+
+```text Why it works
+- Strong modifier combo
+- Less likely to conflict
+- Avoids Shift key
+```
+</CodeGroup>
+
+### Function Keys
+
+<CodeGroup>
+```text Simple Pattern
+F13
+F14
+F15
+F19
+```
+
+```text Why it works
+- Single keypress
+- Often unassigned on full keyboards
+- No conflicts with typing ever
+- Requires extended keyboard
+```
+</CodeGroup>
+
+<Info>
+F13-F20 are rarely used by macOS or other apps, making them excellent choices for global shortcuts.
+</Info>
+
+## Handling Shortcut Conflicts
+
+### How Conflicts Work
+
+Global hotkeys are first-come, first-served:
+
+1. **Text Shot registers first** → Text Shot owns the hotkey
+2. **Another app registers first** → Other app owns it, Text Shot's won't fire
+3. **System shortcut exists** → System always wins
+
+<Warning>
+If your hotkey isn't working, it's likely because another app or system function is using it.
+</Warning>
+
+### Checking for Conflicts
+
+<Steps>
+  <Step title="Check macOS System Shortcuts">
+    Open **System Settings → Keyboard → Keyboard Shortcuts**
+    
+    Look through all categories:
+    - Launchpad & Dock
+    - Mission Control  
+    - Keyboard
+    - Screenshots
+    - Services
+    - App Shortcuts
+  </Step>
+  
+  <Step title="Check other apps">
+    Common apps with global hotkeys:
+    - Alfred
+    - BetterTouchTool
+    - Keyboard Maestro
+    - Raycast
+    - Rectangle/Magnet
+    - CleanShot X
+    
+    Check their settings for conflicts.
+  </Step>
+  
+  <Step title="Choose a unique shortcut">
+    Pick a combination that's not in use by either system or apps.
+  </Step>
+</Steps>
+
+### Resolving Conflicts
+
+If Text Shot's hotkey isn't firing:
+
+<Accordion title="Option 1: Change Text Shot's hotkey">
+Easiest solution - pick a different shortcut in Text Shot Settings.
+
+Recommended if the conflict is with a system shortcut you use frequently.
+</Accordion>
+
+<Accordion title="Option 2: Disable the conflicting shortcut">
+If another app or system function is using your preferred shortcut:
+
+1. Find the conflict in System Settings or the app's preferences
+2. Disable or change it
+3. Restart Text Shot
+4. Your preferred shortcut should now work
+</Accordion>
+
+<Accordion title="Option 3: Launch Text Shot first">
+If you really want a specific shortcut:
+
+1. Quit all other apps that might use it
+2. Launch Text Shot
+3. Text Shot registers the shortcut first
+4. Launch other apps
+
+This is temporary - after restart, the conflict may return.
+</Accordion>
+
+## Best Practices for Choosing Hotkeys
+
+<CardGroup cols={2}>
+  <Card title="Use Memorable Patterns" icon="brain">
+    Choose shortcuts that make mnemonic sense:
+    - `⌘⇧T` for **T**ext
+    - `⌘⇧O` for **O**CR  
+    - `⌘⇧2` follows macOS screenshot pattern
+  </Card>
+  
+  <Card title="Avoid Typing Conflicts" icon="keyboard">
+    Don't use shortcuts that interfere with typing:
+    - Avoid `⌘A`, `⌘C`, `⌘V` (universal shortcuts)
+    - Avoid `⌘⇧[` or `⌘⇧]` (used in editors)
+    - Use two modifiers to reduce conflicts
+  </Card>
+  
+  <Card title="Consider One-Hand Use" icon="hand">
+    For maximum speed, choose shortcuts you can press with one hand:
+    - Left hand: `⌘⇧Q/W/E/A/S/D/Z/X/C`
+    - Right hand: `⌘⇧I/O/P/J/K/L/M`
+    - Function keys: `F13-F15` on right side
+  </Card>
+  
+  <Card title="Test in Your Workflow" icon="vial">
+    Try your shortcut in real usage:
+    - Can you press it quickly?
+    - Does it feel natural?
+    - Does it conflict with apps you use often?
+    - Is it easy to remember?
+  </Card>
+</CardGroup>
+
+## Shortcut Display Format
+
+Text Shot displays shortcuts using Unicode symbols:
+
+```swift
+static func displayString(for shortcut: AppHotkeyShortcut?) -> String {
+    shortcut?.description ?? "Not set"
+}
+```
+
+### Symbol Reference
+
+| Key | Symbol | Unicode | Name |
+|-----|--------|---------|------|
+| Command | ⌘ | U+2318 | Place of interest sign |
+| Shift | ⇧ | U+21E7 | Upwards white arrow |
+| Option | ⌥ | U+2325 | Option key |
+| Control | ⌃ | U+2303 | Up arrowhead |
+
+<Info>
+These symbols match macOS's standard shortcut display format used throughout the system.
+</Info>
+
+### Display Examples
+
+| Shortcut Pressed | Displayed As |
+|------------------|-------------|
+| Command + Shift + 2 | ⇧⌘2 |
+| Control + Option + T | ⌃⌥T |
+| Command + Shift + Option + X | ⌥⇧⌘X |
+| F13 | F13 |
+| Command + F5 | ⌘F5 |
+
+<Note>
+Modifier order in display: Shift → Control → Option → Command, followed by the main key.
+</Note>
+
+## Hotkey Manager Architecture
+
+### How Hotkeys Are Registered
+
+Text Shot uses a two-layer architecture:
+
+#### Layer 1: KeyboardShortcuts Framework
+
+```swift
+// HotkeyManager.swift
+extension KeyboardShortcuts.Name {
+    static let globalCaptureHotkey = Self("globalCaptureHotkey")
+}
+```
+
+This is a wrapper around Carbon Event Manager's `RegisterEventHotKey`.
+
+#### Layer 2: HotkeyBindingController
+
+```swift
+// HotkeyBindingController.swift
+final class HotkeyBindingController: HotkeyManaging {
+    init() {
+        KeyboardShortcuts.onKeyDown(for: recorderName) { [weak self] in
+            self?.onHotkeyPressed?()
+        }
+    }
+}
+```
+
+This connects the low-level hotkey to Text Shot's capture flow.
+
+### Hotkey Lifecycle
+
+<Steps>
+  <Step title="Registration at launch">
+    When Text Shot launches, `HotkeyBindingController.init()` registers the hotkey with the system.
+  </Step>
+  
+  <Step title="User presses hotkey">
+    macOS detects the key combination and fires the registered callback.
+  </Step>
+  
+  <Step title="Callback invokes AppController">
+    ```swift
+    hotkeyManager.onHotkeyPressed = { [weak self] in
+        Task { @MainActor [weak self] in
+            await self?.runCaptureFlow()
+        }
+    }
+    ```
+  </Step>
+  
+  <Step title="Capture flow begins">
+    `AppController.runCaptureFlow()` triggers screenshot, OCR, and clipboard operations.
+  </Step>
+</Steps>
+
+### Hotkey Changes
+
+When you change the hotkey in Settings:
+
+```swift
+@discardableResult
+func apply(shortcut: AppHotkeyShortcut?) throws -> AppHotkeyShortcut? {
+    try validateForRecorder(shortcut)  // Validate first
+    KeyboardShortcuts.setShortcut(shortcut, for: recorderName)  // Apply
+    onShortcutChanged?(shortcut)  // Notify listeners
+    return shortcut
+}
+```
+
+From `HotkeyBindingController.swift:29-34`, this:
+1. Unregisters the old hotkey
+2. Registers the new hotkey
+3. Updates the Settings UI
+4. Saves to settings file
+
+<Info>
+Hotkey changes take effect immediately - no app restart required.
+</Info>
+
+## Troubleshooting Hotkey Issues
+
+### Hotkey Not Firing
+
+<Accordion title="Check for conflicts">
+Another app or system function may be using your hotkey:
+
+1. Open System Settings → Keyboard → Keyboard Shortcuts
+2. Check all categories for conflicts
+3. Try a different hotkey combination
+</Accordion>
+
+<Accordion title="Check app is running">
+Text Shot must be running for the hotkey to work:
+
+```bash
+# Check if Text Shot is running
+ps aux | grep -i textshot
+```
+
+If not running, launch it from Applications.
+</Accordion>
+
+<Accordion title="Check Screen Recording permission">
+Without Screen Recording permission, the hotkey fires but capture fails:
+
+1. Press hotkey - does the crosshair appear?
+2. If yes, permission is fine
+3. If no, see [Permissions](/guide/permissions) page
+</Accordion>
+
+### Hotkey Recorder Not Working
+
+<Accordion title="Field not accepting input">
+Try:
+1. Click the field again to ensure it's focused
+2. Look for a blue outline or cursor
+3. Press Delete to clear, then try your shortcut again
+</Accordion>
+
+<Accordion title="Validation errors persist">
+If you keep getting validation errors:
+
+1. Try using two modifiers (e.g., `⌘⇧2` instead of `⌘2`)
+2. Avoid system shortcuts like `⌘Q`, `⌘W`, `⌘Tab`
+3. Use function keys which always work: `F13`, `F14`, etc.
+</Accordion>
+
+### Reset to Default Hotkey
+
+If you want to restore the default `⌘⇧2`:
+
+1. Open Text Shot Settings  
+2. Click the hotkey field
+3. Press Command + Shift + 2
+4. The default is restored
+
+Or manually edit settings:
+
+```bash
+# Edit settings file
+open ~/Library/Application\ Support/Text\ Shot/settings-v3.json
+
+# Change "hotkey" value to:
+"hotkey": "⇧⌘2"
+```
+
+<Tip>
+You can also delete the settings file entirely - Text Shot will recreate it with defaults on next launch.
+</Tip>

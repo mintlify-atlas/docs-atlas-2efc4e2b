@@ -1,0 +1,347 @@
+---
+title: Features
+description: Comprehensive overview of Text Shot's capabilities
+---
+
+Text Shot is a lightweight, privacy-focused screenshot-to-text utility for macOS. It combines powerful OCR capabilities with a keyboard-driven workflow.
+
+## Core Features
+
+<CardGroup cols={2}>
+  <Card title="On-Device OCR" icon="brain" color="#ea5a0c">
+    Powered by Apple's Vision framework with intelligent retry logic for maximum accuracy. All processing happens locally on your Mac.
+  </Card>
+  
+  <Card title="Keyboard-Driven" icon="keyboard" color="#0285c7">
+    Trigger captures with a global hotkey. No menu bar icon, no UI chrome - just pure functionality.
+  </Card>
+  
+  <Card title="Privacy-First" icon="shield-check" color="#16a34a">
+    No network requests, no accounts, no telemetry. Your screenshots never leave your device.
+  </Card>
+  
+  <Card title="Lightweight" icon="feather" color="#dc2626">
+    Under 2 MB app size. Minimal memory footprint and CPU usage. No background processes when idle.
+  </Card>
+</CardGroup>
+
+## Advanced OCR Engine
+
+### Multi-Stage Recognition
+
+Text Shot doesn't just run OCR once - it employs a sophisticated three-stage retry strategy:
+
+```swift
+// Retry chain from OCRService.swift
+[
+  (.accurate, usesLanguageCorrection: true),
+  (.accurate, usesLanguageCorrection: false),
+  (.fast, usesLanguageCorrection: true)
+]
+```
+
+<Accordion title="How the retry logic works">
+**Stage 1: Accurate + Language Correction**
+
+Ideal for natural language text (documents, emails, articles). The Vision framework applies language models to improve accuracy.
+
+**Stage 2: Accurate without Language Correction**
+
+Better for technical content like code, URLs, configuration files, or text with specialized terminology that language correction might alter.
+
+**Stage 3: Fast + Language Correction**
+
+A final fallback using faster (but less accurate) recognition. This stage catches text that the accurate mode struggled with due to image quality or unusual fonts.
+
+The engine stops as soon as any stage returns non-empty text, ensuring optimal balance between speed and accuracy.
+</Accordion>
+
+### Intelligent Text Cleanup
+
+Extracted text is automatically cleaned:
+
+- Removes OCR noise artifacts (repeated punctuation like `|||` or `~~~`)
+- Normalizes line endings to Unix-style `\n`
+- Strips trailing whitespace from lines
+- Collapses excessive blank lines
+- Preserves intentional formatting and indentation
+
+<Info>
+The cleanup algorithm is conservative - it removes obvious noise while preserving structure.
+</Info>
+
+## Keyboard Shortcut System
+
+### Global Hotkey
+
+Text Shot registers a system-wide keyboard shortcut:
+
+- **Default**: `⌘⇧2` (Command + Shift + 2)
+- Works from any application
+- Triggers capture immediately
+- No app switching required
+
+### Customizable Hotkeys
+
+Fully customize your capture hotkey in Settings:
+
+- Any combination of `⌘`, `⌃`, `⌥`, `⇧`
+- Any letter, number, or symbol key
+- Function keys (F1-F20) without modifiers
+- System conflict detection
+- Live validation
+
+<Warning>
+Some key combinations may conflict with system shortcuts or other apps. Text Shot will warn you about Option-only shortcuts on macOS 15+.
+</Warning>
+
+### Hotkey Recording Interface
+
+The Settings app includes a keyboard shortcut recorder:
+
+1. Click the shortcut field
+2. Press your desired key combination
+3. Text Shot validates and applies it immediately
+4. If invalid, your previous shortcut is restored
+
+<Tip>
+Press Delete or Backspace in the recorder field to clear the shortcut temporarily.
+</Tip>
+
+## Clipboard Integration
+
+Seamless integration with macOS clipboard:
+
+### Automatic Copy
+
+Successfully extracted text is automatically:
+
+1. Cleared from previous clipboard contents
+2. Written to system pasteboard as plain text
+3. Ready to paste immediately with `⌘V`
+
+### Duplicate Detection
+
+```swift
+if text == lastCopiedText {
+    clipboardService.write(text)  // Copy anyway
+    return  // But skip toast notification
+}
+```
+
+Text Shot remembers the last text it copied. Recapturing the same text still updates the clipboard but skips the confirmation toast to reduce notification noise.
+
+## Confirmation Toasts
+
+### Visual Feedback
+
+Elegant HUD-style notifications appear after each capture:
+
+- **"Copied!"** - Text successfully extracted and copied
+- **"No text"** - No recognizable text found in capture
+- **"Capture failed"** - Screenshot failed (usually permission issue)
+- **"Error"** - OCR processing error
+
+### Toast Design
+
+Implemented in `ToastPresenter.swift:91-206`:
+
+- **Style**: Rounded HUD window with blur effect
+- **Position**: Center of screen containing mouse cursor
+- **Multi-display**: Automatically positions on the correct display
+- **Animation**: Smooth 0.14s fade in, 2s hold, 0.22s fade out
+- **Non-intrusive**: Appears above windows but ignores mouse events
+
+<Note>
+Toasts can be completely disabled in Settings if you prefer silent operation.
+</Note>
+
+## Launch at Login
+
+Optional launch at login functionality:
+
+- Enable via Settings
+- Uses macOS Launch Services (not deprecated Login Items)
+- Starts minimized with no windows
+- Global hotkey becomes active immediately
+- Can be disabled at any time
+
+<Info>
+When launched at login, Text Shot runs silently in the background until you trigger a capture.
+</Info>
+
+## Privacy and Security
+
+### Zero Network Activity
+
+Text Shot makes **zero network requests**:
+
+- No analytics or telemetry
+- No update checks
+- No cloud processing
+- No external services
+
+### On-Device Processing
+
+All OCR processing uses Apple's Vision framework:
+
+```swift
+let request = VNRecognizeTextRequest()
+request.recognitionLevel = .accurate
+let handler = VNImageRequestHandler(cgImage: image)
+try handler.perform([request])
+```
+
+Processing happens entirely on your Mac, utilizing Apple's Neural Engine for hardware acceleration.
+
+### No Data Collection
+
+- No user accounts required
+- No login or registration
+- No data leaves your device
+- Screenshots are immediately deleted after OCR
+
+<Warning>
+Text Shot requires Screen Recording permission to capture screenshots, but captured images are only stored temporarily in memory and deleted immediately after OCR completes.
+</Warning>
+
+## Lightweight Design
+
+### Minimal Footprint
+
+- **App size**: ~2 MB
+- **Memory usage**: ~30-50 MB while idle
+- **CPU usage**: Near zero when not capturing
+- **Disk usage**: Settings file only (~1 KB)
+
+### No Background Processes
+
+Text Shot doesn't run any background processes:
+
+- No menu bar agent (unless you want one)
+- No daemon processes
+- Hotkey registered directly with system
+- Wakes only when hotkey pressed
+
+<Tip>
+Check Activity Monitor - you'll see TextShotSettings uses minimal resources even with Launch at Login enabled.
+</Tip>
+
+## System Integration
+
+### macOS Native APIs
+
+Built entirely with native macOS frameworks:
+
+- **Vision** - OCR processing
+- **AppKit** - UI and window management
+- **SwiftUI** - Settings interface
+- **KeyboardShortcuts** - Global hotkey registration
+- **ServiceManagement** - Launch at login
+
+### Screen Recording Permission
+
+Text Shot uses the system `screencapture` utility:
+
+```swift
+let process = Process()
+process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+process.arguments = ["-i", "-x", outputPath]
+```
+
+This requires Screen Recording permission, which macOS grants through System Settings.
+
+<Info>
+See the [Permissions](/guide/permissions) page for detailed information about Screen Recording permission.
+</Info>
+
+## Settings Persistence
+
+### Storage Location
+
+Settings are stored in Application Support:
+
+```
+~/Library/Application Support/Text Shot/settings-v3.json
+```
+
+### Settings Migration
+
+Text Shot automatically migrates settings from older versions:
+
+- Checks for `settings-v2.json`, `settings.json`
+- Migrates to `settings-v3.json` schema
+- Preserves hotkey, confirmation, and launch preferences
+- Creates migration marker to prevent re-migration
+
+<Accordion title="Settings file structure">
+```json
+{
+  "schemaVersion": 3,
+  "hotkey": "⇧⌘2",
+  "showConfirmation": true,
+  "launchAtLogin": false,
+  "lastPermissionPromptAt": 0
+}
+```
+
+The settings file is human-readable JSON with pretty printing and sorted keys.
+</Accordion>
+
+## Performance Characteristics
+
+### Capture Performance
+
+Typical timings for the complete capture flow:
+
+| Stage | Duration | Notes |
+|-------|----------|-------|
+| Hotkey to capture UI | < 0.1s | System screencapture utility |
+| Region selection | User-dependent | Interactive crosshair selection |
+| Screenshot save | < 0.1s | Saved to temp file |
+| OCR processing | 0.5-2s | Depends on image size and complexity |
+| Clipboard copy | Instant | Direct pasteboard write |
+| Toast notification | 2s | Optional, can be disabled |
+
+### OCR Optimization
+
+The retry chain optimizes for speed:
+
+- Stops immediately when text is found
+- Doesn't run all three stages unless necessary
+- Fast mode only used as last resort
+
+<Info>
+Most captures complete in 1-2 seconds total, from hotkey press to text in clipboard.
+</Info>
+
+## Accessibility
+
+### Keyboard-Only Operation
+
+Complete functionality without mouse:
+
+- Trigger with keyboard shortcut
+- Use arrow keys + Shift during selection (system screencapture feature)
+- Press Enter to confirm, Escape to cancel
+
+### VoiceOver Support
+
+Settings window is VoiceOver accessible:
+
+- All controls properly labeled
+- Keyboard navigation support
+- Screen reader announcements
+
+## Future-Proof Architecture
+
+Designed for maintainability and evolution:
+
+- **Protocol-based design** - Easy to test and swap implementations
+- **Settings versioning** - Built-in migration system
+- **Separation of concerns** - Services are isolated and focused
+- **Swift concurrency** - Modern async/await throughout
+
+<Tip>
+The codebase is clean, well-tested, and ready for future enhancements like custom OCR languages or export formats.
+</Tip>

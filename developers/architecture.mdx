@@ -1,0 +1,504 @@
+---
+title: Architecture
+description: Deep dive into Text Shot's internal structure and design
+icon: sitemap
+---
+
+Text Shot is a native Swift menu bar application built with SwiftUI. It follows a service-oriented architecture with clear separation between UI, business logic, and system integrations.
+
+## Project Structure
+
+The repository is organized into distinct directories, each with a specific purpose:
+
+```
+text-shot/
+├── native/settings-app/        # Swift Package Manager project
+│   ├── Sources/TextShotSettings/  # Application source code
+│   ├── Tests/TextShotSettingsTests/  # Unit tests
+│   ├── Vendor/KeyboardShortcuts/  # Third-party dependency
+│   └── Package.swift           # Swift package manifest
+├── scripts/                    # Build and release automation
+│   ├── build-settings-app.sh
+│   ├── test-native.sh
+│   ├── release-native.sh
+│   ├── typecheck-native.sh
+│   └── clean-generated.sh
+├── build/                      # Entitlements and export configs
+│   ├── entitlements.mac.plist
+│   ├── entitlements.mac.inherit.plist
+│   └── export-options.native.plist
+├── assets/                     # Icons and visual assets
+│   ├── app_icon.icns
+│   └── screenshot.png
+├── bin/                        # Build output (generated)
+│   └── Text Shot.app
+├── package.json                # Version and npm scripts
+└── ThirdPartyNotices.txt       # License information
+```
+
+## Swift Package Structure
+
+Text Shot is built as a Swift Package with a single executable target defined in `Package.swift`:
+
+```swift Package.swift
+let package = Package(
+    name: "TextShotSettings",
+    platforms: [.macOS(.v13)],
+    products: [
+        .executable(name: "text-shot", targets: ["TextShotSettings"])
+    ],
+    dependencies: [
+        .package(path: "Vendor/KeyboardShortcuts")
+    ],
+    targets: [
+        .executableTarget(
+            name: "TextShotSettings",
+            dependencies: ["KeyboardShortcuts"],
+            linkerSettings: [
+                .linkedFramework("SwiftUI"),
+                .linkedFramework("AppKit"),
+                .linkedFramework("Carbon"),
+                .linkedFramework("Vision"),
+                .linkedFramework("ServiceManagement")
+            ]
+        )
+    ]
+)
+```
+
+<Note>
+The package requires macOS 13.0+ and links against five system frameworks for UI, OCR, hotkeys, and login item management.
+</Note>
+
+## Core Components
+
+Text Shot's architecture centers around `AppController`, which orchestrates all services and manages the capture workflow.
+
+### AppController
+
+**Location**: `native/settings-app/Sources/TextShotSettings/AppController.swift:7`
+
+The main orchestrator that coordinates all services and handles the complete capture flow.
+
+**Key Responsibilities**:
+- Initializes and owns all service instances
+- Manages settings window lifecycle
+- Coordinates the capture-to-clipboard workflow
+- Handles hotkey press events
+- Manages settings persistence
+
+**Service Dependencies**:
+```swift
+private let settingsStore: SettingsStoreV2
+private let hotkeyManager: any HotkeyManaging & HotkeyRecorderBindingProviding
+private let captureService: CaptureServing
+private let ocrService: OCRServing
+private let clipboardService: ClipboardWriting
+private let launchAtLoginService: LaunchAtLoginApplying
+private let toastPresenter: ToastPresenting
+private let screenCapturePermissionService: ScreenCapturePermissionChecking
+```
+
+<Tip>
+All services are injected via the initializer, making `AppController` highly testable with mock implementations.
+</Tip>
+
+### OCRService
+
+**Location**: `native/settings-app/Sources/TextShotSettings/OCRService.swift:9`
+
+Handles text recognition using Apple's Vision framework with a sophisticated retry strategy.
+
+**Features**:
+- **Multi-level OCR**: Tries accurate mode first, then falls back to fast mode
+- **Language correction**: Attempts with and without language correction
+- **Text cleanup**: Removes OCR artifacts and normalizes whitespace
+- **Retry chain**: `[(accurate, correction: true), (accurate, correction: false), (fast, correction: true)]`
+
+**Key Method**:
+```swift
+func runOcrWithRetry(imagePath: String) throws -> String?
+```
+
+The cleanup pipeline:
+1. Normalizes line endings (`\r\n` → `\n`)
+2. Strips trailing whitespace from each line
+3. Removes lines containing only OCR noise characters (`|`, `` ` ``, `~`, etc.)
+4. Collapses multiple blank lines into at most two
+5. Trims leading/trailing whitespace
+
+<Note>
+OCR processing happens entirely on-device using the Vision framework—no network calls are made.
+</Note>
+
+### CaptureService
+
+**Location**: `native/settings-app/Sources/TextShotSettings/CaptureService.swift:22`
+
+Wraps macOS's built-in `screencapture` command-line tool for interactive region selection.
+
+**Implementation**:
+```swift
+func captureRegion() async -> CaptureResult {
+    let output = CaptureTempStore.shared.makeCaptureFileURL()
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+    process.arguments = ["-i", "-x", output.path]
+    // ...
+}
+```
+
+**Arguments**:
+- `-i`: Interactive mode (user selects region)
+- `-x`: Suppress shutter sound
+
+**Return Value**: `CaptureResult` with:
+- `canceled`: User pressed Escape
+- `path`: Temporary file path to captured PNG
+- `error`: Human-readable error message
+- `failureReason`: Categorized failure (`.permissionDenied`, `.toolFailed`, `.unexpected`)
+
+**Error Classification**: Parses stderr to detect permission issues by looking for phrases like "screen recording", "not authorized", "permission denied".
+
+### HotkeyManager
+
+**Location**: `native/settings-app/Sources/TextShotSettings/HotkeyManager.swift:42`
+
+Manages global keyboard shortcuts using the vendored KeyboardShortcuts library.
+
+**Default Shortcut**: `Cmd + Shift + 2` (⇧⌘2)
+
+**Validation Rules**:
+1. **Modifier requirement**: All shortcuts must have at least one modifier (Command, Option, Control, Shift), UNLESS it's an F-key
+2. **F-keys exception**: F1-F20 can be used without modifiers
+3. **macOS 15 warning**: Option-only shortcuts (without Command/Control) may not fire reliably on macOS 15+
+
+**Key Method**:
+```swift
+func apply(shortcut: AppHotkeyShortcut?) throws -> AppHotkeyShortcut?
+```
+
+<Warning>
+The `HotkeyManager` is a namespace enum, not a class. The actual implementation is in `HotkeyBindingController`.
+</Warning>
+
+### SettingsStoreV2
+
+**Location**: `native/settings-app/Sources/TextShotSettings/SettingsModel.swift:43`
+
+Persists app settings as JSON in the Application Support directory.
+
+**Settings Schema** (v3):
+```swift
+struct AppSettingsV2: Codable {
+    var schemaVersion: Int           // Current: 3
+    var hotkey: String               // Display string (e.g., "⇧⌘2")
+    var showConfirmation: Bool       // Show "Copied!" toast
+    var launchAtLogin: Bool          // Register as login item
+    var lastPermissionPromptAt: Int  // Unix timestamp
+}
+```
+
+**Persistence Location**:
+```
+~/Library/Application Support/Text Shot/settings-v3.json
+```
+
+**Migration**: `SettingsMigrator` automatically migrates from older schema versions on first launch.
+
+### ClipboardService
+
+**Location**: `native/settings-app/Sources/TextShotSettings/ClipboardService.swift:8`
+
+Simple wrapper around `NSPasteboard` for writing text to the clipboard.
+
+```swift
+func write(_ text: String) {
+    let pasteboard = NSPasteboard.general
+    pasteboard.clearContents()
+    pasteboard.setString(text, forType: .string)
+}
+```
+
+### LaunchAtLoginService
+
+**Location**: `native/settings-app/Sources/TextShotSettings/LaunchAtLoginService.swift:8`
+
+Registers/unregisters the app as a login item using `ServiceManagement` framework (macOS 13+).
+
+```swift
+func apply(enabled: Bool) {
+    if enabled {
+        try SMAppService.mainApp.register()
+    } else {
+        try SMAppService.mainApp.unregister()
+    }
+}
+```
+
+### Supporting Services
+
+<CardGroup cols={2}>
+  <Card title="ToastPresenter" icon="message">
+    **Location**: `ToastPresenter.swift`
+    
+    Displays brief confirmation messages ("Copied!", "No text", "Error") in a floating window.
+  </Card>
+  
+  <Card title="ScreenCapturePermissionService" icon="shield-check">
+    **Location**: `ScreenCapturePermissionService.swift`
+    
+    Checks and requests Screen Recording permission from the user.
+  </Card>
+  
+  <Card title="CaptureTempStore" icon="file">
+    **Location**: `CaptureTempStore.swift`
+    
+    Manages temporary PNG files created during screen capture.
+  </Card>
+  
+  <Card title="AppRelocator" icon="folder-arrow-down">
+    **Location**: `AppRelocator.swift`
+    
+    Prompts user to move app from Downloads to Applications folder.
+  </Card>
+</CardGroup>
+
+## Capture Flow Walkthrough
+
+Here's the complete journey from hotkey press to text on clipboard:
+
+<Steps>
+  <Step title="Hotkey Pressed">
+    User presses the global hotkey (default: ⇧⌘2).
+    
+    The KeyboardShortcuts library fires `HotkeyBindingController.onHotkeyPressed` callback.
+  </Step>
+
+  <Step title="Capture Flow Initiated">
+    `AppController.runCaptureFlow()` is called on the main actor.
+    
+    **Guard clause**: Prevents concurrent captures with `isCaptureInFlight` flag.
+  </Step>
+
+  <Step title="Permission Check">
+    `ScreenCapturePermissionService` verifies Screen Recording permission.
+    
+    If denied, shows system permission prompt and aborts.
+  </Step>
+
+  <Step title="Interactive Screenshot">
+    `CaptureService.captureRegion()` launches `/usr/sbin/screencapture -i -x`.
+    
+    User selects a region with their cursor.
+    
+    Screenshot saved to temporary file in `/tmp`.
+  </Step>
+
+  <Step title="OCR Processing">
+    `OCRService.runOcrWithRetry()` loads the PNG and runs Vision framework OCR.
+    
+    Tries multiple recognition levels until text is found:
+    1. Accurate + language correction
+    2. Accurate without correction
+    3. Fast + language correction
+  </Step>
+
+  <Step title="Text Cleanup">
+    OCR output is cleaned:
+    - Removes trailing whitespace
+    - Filters noise characters
+    - Collapses excessive blank lines
+  </Step>
+
+  <Step title="Clipboard Write">
+    `ClipboardService.write()` copies the text to the system clipboard.
+    
+    User can now paste with ⌘V.
+  </Step>
+
+  <Step title="Confirmation Toast">
+    If `showConfirmation` is enabled, `ToastPresenter` shows "Copied!" for 1 second.
+  </Step>
+
+  <Step title="Cleanup">
+    Temporary screenshot file is deleted from `/tmp`.
+  </Step>
+</Steps>
+
+<Note>
+The entire flow is asynchronous and runs on the main actor to safely interact with AppKit and SwiftUI.
+</Note>
+
+## Settings Persistence and Migration
+
+Text Shot uses a versioned settings schema with automatic migration.
+
+### Schema Evolution
+
+| Version | Schema File | Changes |
+|---------|-------------|----------|
+| 1 | `settings.json` (legacy) | Original schema |
+| 2 | `settings-v2.json` | Added `lastPermissionPromptAt` |
+| 3 | `settings-v3.json` | Current schema with refined migration |
+
+### Migration Process
+
+On first launch, `SettingsMigrator.prepareStore()` (location: `SettingsModel.swift:106`):
+
+1. Checks for existing `settings-v3.json`
+2. If not found, searches for previous versions:
+   - `settings-v2.json`
+   - Legacy `text-shot/settings.json`
+3. Migrates settings by reading raw JSON and mapping to new schema
+4. Creates `.migration-v3-done` marker file
+5. Returns a configured `SettingsStoreV2` instance
+
+<Tip>
+Migration is idempotent—running it multiple times is safe and won't corrupt settings.
+</Tip>
+
+## Dependencies
+
+Text Shot has minimal external dependencies:
+
+### KeyboardShortcuts
+
+**Source**: Vendored in `native/settings-app/Vendor/KeyboardShortcuts/`
+
+**Author**: Sindre Sorhus ([@sindresorhus](https://github.com/sindresorhus))
+
+**License**: MIT
+
+**Purpose**: Provides SwiftUI components and Carbon API wrappers for registering global keyboard shortcuts.
+
+**Why vendored?** Ensures version stability and eliminates external network dependencies during builds.
+
+### System Frameworks
+
+<CardGroup cols={2}>
+  <Card title="SwiftUI" icon="cube">
+    Settings window UI
+  </Card>
+  <Card title="AppKit" icon="window-restore">
+    Menu bar integration, windows
+  </Card>
+  <Card title="Vision" icon="eye">
+    On-device OCR (VNRecognizeTextRequest)
+  </Card>
+  <Card title="Carbon" icon="keyboard">
+    Low-level hotkey registration
+  </Card>
+  <Card title="ServiceManagement" icon="gear">
+    Launch at login (SMAppService)
+  </Card>
+</CardGroup>
+
+## Code Organization Patterns
+
+### Protocol-Oriented Design
+
+All services define protocols to enable dependency injection and testing:
+
+```swift
+protocol OCRServing {
+    func runOcrWithRetry(imagePath: String) throws -> String?
+}
+
+final class OCRService: OCRServing { /* ... */ }
+```
+
+This allows `AppController` to accept any `OCRServing` implementation, making unit tests trivial:
+
+```swift
+class MockOCRService: OCRServing {
+    var mockResult: String?
+    func runOcrWithRetry(imagePath: String) -> String? { mockResult }
+}
+```
+
+### Main Actor Isolation
+
+The entire app runs on the main actor for safe UI access:
+
+```swift
+@MainActor
+final class AppController { /* ... */ }
+```
+
+### Result Type Error Handling
+
+Settings operations return `Result<T, SettingsActionError>` for explicit error handling:
+
+```swift
+func saveSettings(_ editable: EditableSettings) -> Result<EditableSettings, SettingsActionError>
+```
+
+### Weak Self in Closures
+
+Callback closures always use `[weak self]` to prevent retain cycles:
+
+```swift
+hotkeyManager.onHotkeyPressed = { [weak self] in
+    Task { @MainActor [weak self] in
+        await self?.runCaptureFlow()
+    }
+}
+```
+
+## Testing Architecture
+
+Text Shot has comprehensive test coverage in `Tests/TextShotSettingsTests/`:
+
+- **Unit tests**: Each service has isolated tests
+- **Integration tests**: `AppControllerCaptureFlowTests` tests the full workflow with mock services
+- **Mocking**: Protocol-based services are easily replaced with test doubles
+
+**Example test structure**:
+```swift
+final class AppControllerCaptureFlowTests: XCTestCase {
+    var sut: AppController!
+    var mockCapture: MockCaptureService!
+    var mockOCR: MockOCRService!
+    var mockClipboard: MockClipboardService!
+    
+    override func setUp() {
+        mockCapture = MockCaptureService()
+        mockOCR = MockOCRService()
+        mockClipboard = MockClipboardService()
+        
+        sut = AppController(
+            settingsStore: mockStore,
+            captureService: mockCapture,
+            ocrService: mockOCR,
+            clipboardService: mockClipboard
+        )
+    }
+}
+```
+
+## Performance Considerations
+
+### Build Optimization
+
+- **Universal binaries**: Builds both ARM64 and x86_64 in parallel
+- **Temp directory builds**: Uses `/tmp` to avoid iCloud Drive sync delays
+- **Module caching**: Reuses compiled modules across builds
+
+### Runtime Optimization
+
+- **Lazy OCR**: Only runs recognition on actual captures, not continuously
+- **Temp file cleanup**: Immediately deletes screenshot files after OCR
+- **Efficient retries**: Stops OCR retry chain as soon as text is found
+- **Duplicate detection**: Avoids redundant clipboard writes if text hasn't changed
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Building from Source" icon="hammer" href="/developers/building-from-source">
+    Learn how to compile and test Text Shot
+  </Card>
+  <Card title="Contributing" icon="code-pull-request" href="/developers/contributing">
+    Guidelines for contributing to the project
+  </Card>
+</CardGroup>

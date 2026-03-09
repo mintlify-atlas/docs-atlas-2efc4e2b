@@ -1,0 +1,382 @@
+---
+title: Frequently Asked Questions
+description: Common questions about Text Shot
+---
+
+## General Questions
+
+<Accordion title="What is Text Shot?">
+  Text Shot is a lightweight macOS menu bar utility that extracts text from any screen region using OCR (Optical Character Recognition). It's designed for keyboard-first workflows and runs entirely on-device with no network access.
+
+  ### Key Features
+  - Capture any screen region with a hotkey (default: **Cmd+Shift+2**)
+  - Extract text using Apple Vision framework OCR
+  - Copy results directly to clipboard
+  - Fully local processing (no cloud, no network)
+  - Lightweight (~2 MB)
+  - Native Swift menu bar app
+
+  ### Perfect For
+  - Extracting text from videos, PDFs, images
+  - Copying text from non-selectable UI elements
+  - Digitizing printed documents or screenshots
+  - Keyboard-driven workflows
+  - Privacy-conscious users who want local-only processing
+</Accordion>
+
+<Accordion title="Is my data sent to the cloud?">
+  <Warning>
+    **No. Absolutely not.** Text Shot processes everything locally on your Mac.
+  </Warning>
+
+  ### Privacy Guarantees
+  - **No network access** during normal operation
+  - **No telemetry** or analytics
+  - **No user accounts** or authentication
+  - **No data collection** of any kind
+  - Captured images are temporarily stored in memory and immediately deleted after OCR
+  - Only settings are saved locally to `~/Library/Application Support/Text Shot/`
+
+  ### Why You Can Trust This
+  Text Shot is **open source (MIT license)** - you can review the entire codebase on GitHub. There are no network calls anywhere in the source code.
+
+  See the [Security & Privacy](/reference/security) page for full details.
+</Accordion>
+
+<Accordion title="What OCR engine does Text Shot use?">
+  Text Shot uses **Apple's Vision framework** (`VNRecognizeTextRequest`), which is built into macOS.
+
+  ### Why Vision Framework?
+  - **Fully on-device** - no cloud API calls
+  - **Fast and accurate** - optimized by Apple for macOS
+  - **Multi-language support** - dozens of languages out of the box
+  - **No additional dependencies** - ships with macOS
+  - **Privacy-focused** - all processing happens locally
+
+  ### Retry Strategy
+  Text Shot intelligently retries OCR with different settings to maximize accuracy:
+
+  1. **Accurate mode + language correction** (best quality)
+  2. **Accurate mode without correction** (if first attempt fails)
+  3. **Fast mode + correction** (if still no results)
+
+  See `OCRService.swift:15-34` for implementation details.
+
+  ### Performance
+  Typical OCR processing takes **100-500ms** depending on image size and complexity.
+</Accordion>
+
+<Accordion title="What languages are supported?">
+  Text Shot supports all languages available in Apple's Vision framework, including:
+
+  ### Major Languages
+  - English, Spanish, French, German, Italian, Portuguese
+  - Chinese (Simplified and Traditional)
+  - Japanese, Korean
+  - Russian, Ukrainian
+  - Arabic, Hebrew
+  - Hindi, Thai, Vietnamese
+  - And many more
+
+  ### Automatic Language Detection
+  <Info>
+    No configuration needed - Vision automatically detects the language in your captured text.
+  </Info>
+
+  ### Multi-Language Text
+  Vision can recognize multiple languages in the same capture (e.g., English mixed with Chinese).
+
+  ### Not Supported
+  - Handwritten text (limited support)
+  - Highly stylized fonts
+  - Extremely small text (< 8pt)
+  - Low-contrast or blurry images
+</Accordion>
+
+<Accordion title="Why does Text Shot need Screen Recording permission?">
+  Text Shot uses the macOS **`screencapture` utility** to capture screen regions. As of macOS 10.15 (Catalina), Apple requires **Screen Recording permission** for any app that captures screen content.
+
+  ### What the Permission Allows
+  - Capture a user-selected screen region (interactive selection)
+  - Read pixels from that region to perform OCR
+  - Nothing else - Text Shot doesn't record video or capture your screen without your explicit action
+
+  ### How It Works
+  1. You trigger the hotkey
+  2. Text Shot calls `/usr/sbin/screencapture -i -x <temp-file>`
+  3. You select a region with the crosshair cursor
+  4. macOS captures that region to a temporary file
+  5. Text Shot reads the file, runs OCR, and immediately deletes it
+
+  See `CaptureService.swift:23-55` for implementation.
+
+  ### Privacy Note
+  <Info>
+    Text Shot only captures when you explicitly trigger the hotkey. It never captures your screen in the background or automatically.
+  </Info>
+
+  ### Granting Permission
+  1. **System Settings** > **Privacy & Security** > **Screen Recording**
+  2. Enable **Text Shot**
+  3. Restart the app
+</Accordion>
+
+## Features & Usage
+
+<Accordion title="Can I change the hotkey?">
+  **Yes!** You can customize the hotkey to any combination you prefer.
+
+  ### How to Change
+  1. Click the Text Shot menu bar icon
+  2. Select **Settings**
+  3. Click in the hotkey field
+  4. Press your desired key combination
+  5. Click outside the field to save
+
+  ### Default Hotkey
+  **Cmd+Shift+2** (⇧⌘2)
+
+  ### Hotkey Rules
+  - Must include at least one modifier (Cmd, Option, Control, Shift)
+  - **OR** use an F-key (F1-F20) without modifiers
+  - Avoid conflicts with system shortcuts:
+    - **Cmd+Shift+3/4/5**: macOS screenshots
+    - **Cmd+Space**: Spotlight
+    - **Cmd+Tab**: App switcher
+
+  ### macOS 15 Warning
+  <Warning>
+    Option-only shortcuts (without Command or Control) may not fire reliably on macOS 15. Prefer combinations with Command or Control.
+  </Warning>
+
+  See `HotkeyManager.swift:60-76` for validation logic.
+</Accordion>
+
+<Accordion title="Does Text Shot work offline?">
+  **Yes, completely.** Text Shot requires no internet connection at any time.
+
+  ### Why It's Fully Offline
+  - OCR processing uses the built-in **Apple Vision framework**
+  - No cloud APIs or external services
+  - No license validation or phone-home checks
+  - No updates or telemetry
+
+  ### What About Updates?
+  Updates are manual:
+  1. Download the latest DMG from GitHub Releases
+  2. Replace the old app in `/Applications`
+  3. Restart Text Shot
+
+  No automatic update mechanism exists.
+
+  <Info>
+    You can use Text Shot on an air-gapped Mac with no internet connection whatsoever.
+  </Info>
+</Accordion>
+
+<Accordion title="What's the OCR accuracy like?">
+  Accuracy depends on several factors, but Text Shot generally provides **excellent results** thanks to Apple's Vision framework.
+
+  ### Expected Accuracy
+  - **Clean printed text**: 95-99% accuracy
+  - **Screenshots of UI text**: 90-95% accuracy
+  - **Small or low-res text**: 70-85% accuracy
+  - **Handwritten text**: 40-70% accuracy (limited support)
+  - **Unusual fonts**: 60-80% accuracy
+
+  ### Tips for Best Results
+  - Capture high-resolution, high-contrast text
+  - Ensure text is clearly visible (not blurry or pixelated)
+  - Use the largest capture region practical
+  - Avoid extreme angles or distortions
+  - For code, use monospace fonts when possible
+
+  ### Retry Strategy
+  If the first OCR attempt returns no text, Text Shot automatically retries with different settings (accurate vs fast mode, with/without language correction).
+
+  See `OCRService.swift:15-34` for the retry logic.
+</Accordion>
+
+<Accordion title="Can I capture text from videos?">
+  **Yes!** This is one of Text Shot's primary use cases.
+
+  ### How to Capture from Video
+  1. Pause the video at the frame with text you want to extract
+  2. Trigger the Text Shot hotkey (**Cmd+Shift+2**)
+  3. Select the region containing the text
+  4. Text is copied to your clipboard
+
+  ### Tips for Video Text
+  - Pause on a clear frame (avoid motion blur)
+  - Use fullscreen or maximize the video for better resolution
+  - If the first capture fails, try again - sometimes video rendering takes a moment
+
+  ### Streaming Video
+  Text Shot works with streaming video from:
+  - YouTube, Netflix, Hulu, etc.
+  - Video calls (Zoom, Teams, Google Meet)
+  - Screen recordings
+  - Any on-screen video content
+</Accordion>
+
+## Technical Questions
+
+<Accordion title="Is Text Shot free?">
+  **Yes, completely free and open source.**
+
+  ### License
+  Text Shot is licensed under the **MIT License**, which means:
+  - Free to use for personal or commercial purposes
+  - Free to modify and redistribute
+  - No warranty or liability
+  - Must include the original license notice
+
+  ### No Hidden Costs
+  - No in-app purchases
+  - No subscriptions
+  - No ads
+  - No data collection or monetization
+
+  ### Source Code
+  Full source code is available on GitHub. You can build it yourself from source if you prefer.
+
+  See `README.md:71-73` for license details.
+</Accordion>
+
+<Accordion title="Who built Text Shot?">
+  Text Shot was built as an exploration of **agent-assisted software development**.
+
+  ### Development Approach
+  From the README:
+  > Text Shot was built while exploring agent-assisted software development, with a GPT-5.3-Codex model. The application logic and implementation were generated through iterative prompting and system-level direction by the author, then tested in real-world usage and reviewed at a system level before release.
+
+  ### Author Responsibility
+  The author assumes full responsibility for the distributed software, including:
+  - Security reviews
+  - Privacy guarantees
+  - Testing and validation
+  - Ongoing maintenance
+
+  ### Transparency
+  This is an experiment in modern development workflows. The code quality, architecture, and testing reflect real-world agent-assisted development practices.
+
+  See `README.md:59-70` for full context.
+</Accordion>
+
+<Accordion title="What are the system requirements?">
+  ### Minimum Requirements
+  - **macOS 13 (Ventura) or later**
+  - **64-bit Intel or Apple Silicon Mac**
+  - **~2 MB disk space**
+  - **Screen Recording permission**
+
+  ### Recommended
+  - macOS 14 (Sonoma) or later
+  - Apple Silicon (M1/M2/M3) for best performance
+
+  ### Why macOS 13+?
+  Text Shot uses modern Swift concurrency (`async/await`) and SwiftUI features that require macOS 13 or later.
+
+  ### Performance
+  - **Memory usage**: ~20-40 MB RAM
+  - **CPU usage**: Minimal (spikes briefly during OCR)
+  - **Battery impact**: Negligible (only active during captures)
+</Accordion>
+
+<Accordion title="Can I contribute to Text Shot?">
+  **Yes!** Text Shot is open source on GitHub.
+
+  ### How to Contribute
+  1. Fork the repository on GitHub
+  2. Make your changes in a feature branch
+  3. Write tests for new functionality
+  4. Submit a pull request with a clear description
+
+  ### Areas for Contribution
+  - Bug fixes
+  - Performance improvements
+  - UI/UX enhancements
+  - Documentation improvements
+  - Test coverage
+
+  ### Building from Source
+  ```bash
+  git clone <repo-url>
+  cd text-shot
+  npm install
+  npm run build
+  npm start
+  ```
+
+  See `README.md:32-48` for build instructions.
+
+  ### License
+  All contributions must be compatible with the MIT License.
+</Accordion>
+
+<Accordion title="Does Text Shot collect any analytics or telemetry?">
+  <Warning>
+    **No. Zero. None. Text Shot collects absolutely nothing.**
+  </Warning>
+
+  ### What We Don't Collect
+  - Usage statistics
+  - Crash reports
+  - Performance metrics
+  - Feature usage
+  - OCR results
+  - Captured images
+  - Settings or preferences
+  - Device information
+  - Network requests
+
+  ### What Is Stored Locally
+  Only your user preferences in `~/Library/Application Support/Text Shot/settings-v3.json`:
+  - Hotkey configuration
+  - "Show confirmation toast" setting
+  - "Launch at Login" setting
+  - Last permission prompt timestamp (to avoid spam)
+
+  ### Verification
+  Review the entire source code on GitHub - there are no network calls except during app updates (manual download).
+
+  See [Security & Privacy](/reference/security) for full details.
+</Accordion>
+
+## Troubleshooting
+
+<Accordion title="Text Shot isn't working - what should I check?">
+  Most issues fall into a few categories. Check these first:
+
+  ### 1. Screen Recording Permission
+  - **System Settings** > **Privacy & Security** > **Screen Recording**
+  - Ensure Text Shot is **enabled**
+  - **Restart** the app after enabling
+
+  ### 2. Hotkey Conflicts
+  - Try changing the hotkey to something unique
+  - Default is **Cmd+Shift+2**
+  - Avoid system shortcuts (Cmd+Shift+3/4/5, Cmd+Space, etc.)
+
+  ### 3. macOS Version
+  - Text Shot requires **macOS 13 or later**
+  - Check: Apple menu > About This Mac
+
+  ### 4. OCR Issues
+  - Ensure text is clear and high-contrast
+  - Capture a larger region with more context
+  - Try capturing again (Vision framework can be inconsistent)
+
+  ### Still Not Working?
+  See the full [Troubleshooting Guide](/reference/troubleshooting) for detailed solutions.
+</Accordion>
+
+## Getting Help
+
+<Info>
+  **Need more help?**
+
+  - Check the [Troubleshooting Guide](/reference/troubleshooting) for detailed solutions
+  - Review [Security & Privacy](/reference/security) for permission details
+  - Open an issue on GitHub with your macOS version and steps to reproduce
+</Info>

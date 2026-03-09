@@ -1,80 +1,537 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quickstart
+description: Get productive with Text Shot in under 60 seconds
 ---
 
-## Get started in three steps
+## Your First Capture
 
-Get your documentation site running locally and make your first customization.
-
-### Step 1: Set up your local environment
-
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
-
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
-
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 3: Go live
-
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
-
-## Next steps
-
-Now that you have your docs running, explore these key features:
-
-<CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
-</CardGroup>
+This guide walks you through performing your first text extraction with Text Shot. The entire process takes less than 60 seconds.
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+  Before starting, ensure you've completed the [installation](/installation) and granted Screen Recording permission.
 </Note>
+
+<Steps>
+  <Step title="Open Content with Text">
+    Open any window, document, or webpage that contains text you want to extract.
+    
+    **Good sources for testing:**
+    - A web browser with an article
+    - A PDF document
+    - An image with text
+    - A video paused on a frame with subtitles
+    - An error message dialog
+    
+    The text doesn't need to be selectable - Text Shot can extract text from images, videos, or any on-screen content.
+  </Step>
+
+  <Step title="Trigger the Capture">
+    Press your global hotkey to start a capture.
+    
+    **Default hotkey:** `⇧⌘2` (Shift + Command + 2)
+    
+    Your cursor will change to a crosshair, indicating Text Shot is ready to capture.
+    
+    <Note>
+      If nothing happens when you press the hotkey, verify that Text Shot is running (check for the icon in your menu bar) and that you've granted Screen Recording permission.
+    </Note>
+  </Step>
+
+  <Step title="Select the Text Region">
+    Click and drag to draw a rectangle around the text you want to extract.
+    
+    **Tips for best results:**
+    - Include some padding around the text edges
+    - Avoid capturing too much non-text content
+    - For multi-line text, capture the entire block
+    - Ensure the text has good contrast with the background
+    
+    Release the mouse button when you've selected the region.
+    
+    ```swift
+    // From CaptureService.swift - Uses macOS screencapture tool
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+    process.arguments = ["-i", "-x", output.path]  // -i = interactive, -x = no sound
+    ```
+    
+    **Cancel the capture:** Press `Esc` or click outside the selection to cancel.
+  </Step>
+
+  <Step title="Wait for OCR Processing">
+    Text Shot processes your capture automatically.
+    
+    The OCR typically completes in **under 1 second** for most captures. You'll see one of these outcomes:
+    
+    - **"Copied!"** - Text extracted successfully (if confirmation is enabled)
+    - **"No text"** - No recognizable text found in the region
+    - **"Error"** - OCR processing failed
+    
+    <Note>
+      Text Shot uses a multi-level OCR strategy with automatic fallback to maximize accuracy. It tries accurate mode with language correction first, then without correction, then fast mode.
+    </Note>
+    
+    ```swift
+    // From OCRService.swift - Automatic quality fallback
+    private let retryChain: [(RecognitionLevel, Bool)] = [
+        (.accurate, true),   // Try accurate + language correction
+        (.accurate, false),  // Try accurate without correction
+        (.fast, true)        // Fall back to fast mode
+    ]
+    
+    for (level, correction) in retryChain {
+        let text = try recognizeText(from: cgImage, level: level, correction: correction)
+        if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return cleanupOcrText(text)
+        }
+    }
+    ```
+  </Step>
+
+  <Step title="Paste the Text">
+    The extracted text is now on your clipboard. Paste it anywhere using `⌘V`.
+    
+    **Try pasting into:**
+    - A text editor (TextEdit, VS Code, Sublime Text)
+    - A note-taking app (Apple Notes, Obsidian, Notion)
+    - A messaging app (Slack, Discord, Messages)
+    - A document (Microsoft Word, Google Docs)
+    - A terminal or code editor
+    
+    The text maintains its line breaks and formatting structure:
+    
+    ```swift
+    // From OCRService.swift - Text cleanup preserves structure
+    func cleanupOcrText(_ input: String) -> String {
+        let normalized = input.replacingOccurrences(of: "\r\n", with: "\n")
+        
+        // Remove trailing spaces from lines
+        let lines = normalized.split(separator: "\n", omittingEmptySubsequences: false)
+            .map { $0.replacingOccurrences(of: "[ \t]+$", with: "", options: .regularExpression) }
+        
+        // Collapse excessive blank lines
+        let collapsed = lines.joined(separator: "\n")
+            .replacingOccurrences(of: "\n{3,}", with: "\n\n", options: .regularExpression)
+        
+        return collapsed.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+    ```
+  </Step>
+
+  <Step title="Verify the Results">
+    Check that the extracted text matches what you selected on screen.
+    
+    **What to expect:**
+    - Most printed text extracts with near-perfect accuracy
+    - Handwritten text may have lower accuracy
+    - Very small text or low-contrast text may be harder to recognize
+    - Special characters and symbols generally work well
+    - Multiple languages are supported automatically
+    
+    <Warning>
+      Always verify extracted text for accuracy, especially for critical use cases like copying API keys, code, or important data.
+    </Warning>
+    
+    If the text quality is poor, try capturing again with:
+    - A larger selection area
+    - Better contrast (zoom in, adjust brightness)
+    - Clearer source material
+  </Step>
+</Steps>
+
+## Understanding the Workflow
+
+Now that you've completed your first capture, let's understand what happened behind the scenes:
+
+### 1. Hotkey Trigger
+
+When you press your hotkey, Text Shot's hotkey manager fires the capture flow:
+
+```swift
+// From AppController.swift
+hotkeyManager.onHotkeyPressed = { [weak self] in
+    Task { @MainActor [weak self] in
+        await self?.runCaptureFlow()
+    }
+}
+```
+
+### 2. Permission Check
+
+Before capturing, Text Shot verifies it has Screen Recording permission:
+
+```swift
+// From AppController.swift
+let hasScreenCaptureAccess: Bool
+if screenCapturePermissionService.preflightAuthorized() {
+    hasScreenCaptureAccess = true
+} else {
+    hasScreenCaptureAccess = screenCapturePermissionService.requestIfNeededOncePerLaunch()
+}
+
+guard hasScreenCaptureAccess else {
+    return  // Can't proceed without permission
+}
+```
+
+### 3. Screen Capture
+
+Text Shot invokes macOS's built-in `screencapture` utility in interactive mode:
+
+```swift
+// From CaptureService.swift
+func captureRegion() async -> CaptureResult {
+    let output = CaptureTempStore.shared.makeCaptureFileURL()
+    
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+    process.arguments = ["-i", "-x", output.path]
+    
+    try process.run()
+    process.waitUntilExit()
+    
+    if process.terminationStatus == 0 && FileManager.default.fileExists(atPath: output.path) {
+        return CaptureResult(canceled: false, path: output.path, error: nil, failureReason: nil)
+    }
+    
+    return resultForFailure(terminationStatus: process.terminationStatus, stderr: stderr)
+}
+```
+
+**Arguments explained:**
+- `-i` = Interactive mode (lets you select a region)
+- `-x` = No camera shutter sound
+- `output.path` = Temporary file path for the screenshot
+
+### 4. OCR Processing
+
+The captured image is processed using Apple's Vision framework:
+
+```swift
+// From OCRService.swift
+private func recognizeText(from image: CGImage, level: RecognitionLevel, correction: Bool) throws -> String {
+    let request = VNRecognizeTextRequest()
+    request.recognitionLevel = level == .fast ? .fast : .accurate
+    request.usesLanguageCorrection = correction
+    
+    let handler = VNImageRequestHandler(cgImage: image)
+    try handler.perform([request])
+    
+    let observations = request.results ?? []
+    let lines = observations.compactMap { observation in
+        observation.topCandidates(1).first?.string.trimmingCharacters(in: .whitespacesAndNewlines)
+    }.filter { !$0.isEmpty }
+    
+    return lines.joined(separator: "\n")
+}
+```
+
+**Recognition levels:**
+- **Accurate**: Higher quality, slower processing
+- **Fast**: Lower quality, faster processing
+
+**Language correction:**
+- Enabled by default for better accuracy with real words
+- Disabled as fallback for technical text, codes, or special characters
+
+### 5. Clipboard Copy
+
+Successfully extracted text is automatically copied to your clipboard:
+
+```swift
+// From AppController.swift
+guard let text = try ocrService.runOcrWithRetry(imagePath: path), !text.isEmpty else {
+    showToastIfEnabled("No text")
+    return
+}
+
+clipboardService.write(text)
+lastCopiedText = text
+showToastIfEnabled("Copied!")
+```
+
+### 6. Temporary File Cleanup
+
+The screenshot file is automatically deleted after processing:
+
+```swift
+// From AppController.swift
+defer {
+    CaptureTempStore.shared.removeCaptureFile(atPath: path)
+}
+```
+
+Your captures never accumulate on disk - they're processed and immediately removed.
+
+## Common Use Cases
+
+Now that you understand the workflow, here are some practical ways to use Text Shot:
+
+<CardGroup cols={2}>
+  <Card title="Extract Video Subtitles" icon="video">
+    Pause a video on a frame with subtitles, capture the subtitle region, and paste the text into your notes.
+  </Card>
+  
+  <Card title="Copy Error Messages" icon="triangle-exclamation">
+    Capture error dialogs that don't allow text selection, then paste into search engines or issue trackers.
+  </Card>
+  
+  <Card title="Transcribe Presentations" icon="presentation">
+    Capture slides from video presentations or screen recordings to extract key points and quotes.
+  </Card>
+  
+  <Card title="Extract Code from Images" icon="code">
+    Pull code snippets from screenshots, tutorial images, or social media posts into your editor.
+  </Card>
+  
+  <Card title="Convert PDF Text" icon="file-pdf">
+    Extract text from PDF documents that don't allow copying, including scanned documents.
+  </Card>
+  
+  <Card title="Social Media Content" icon="hashtag">
+    Copy text from images on Twitter, Instagram, or other platforms that embed text in images.
+  </Card>
+</CardGroup>
+
+## Tips for Best Results
+
+<Note>
+  Text Shot's OCR accuracy depends on the quality of the captured image. Follow these tips to maximize accuracy.
+</Note>
+
+### Optimize Your Captures
+
+**Do:**
+- ✅ Capture text with good contrast (dark text on light background)
+- ✅ Include a small margin around the text edges
+- ✅ Zoom in on small text before capturing
+- ✅ Ensure text is in focus and not blurry
+- ✅ Capture text at its native resolution
+
+**Don't:**
+- ❌ Capture heavily compressed or low-quality images
+- ❌ Include too much non-text content in the selection
+- ❌ Capture text with busy backgrounds that reduce contrast
+- ❌ Select regions with overlapping text or complex layouts
+- ❌ Capture text that's too small to read comfortably
+
+### Language Support
+
+Text Shot uses Apple Vision's OCR, which supports multiple languages automatically:
+
+- English, Spanish, French, German, Italian, Portuguese
+- Chinese (Simplified and Traditional), Japanese, Korean
+- Russian, Arabic, Hindi, and many more
+
+Language detection is automatic - you don't need to configure anything.
+
+### Handling Special Content
+
+**Code and technical text:**
+- Code snippets generally work well
+- Syntax highlighting doesn't affect accuracy
+- Indentation is preserved in most cases
+- Special characters (brackets, operators) are recognized
+
+**Numbers and data:**
+- Phone numbers, addresses, and IDs extract accurately
+- Tables and structured data may lose formatting
+- Currency symbols and units are recognized
+
+**Mixed content:**
+- URLs and email addresses work well
+- Emoji and special Unicode characters are supported
+- Mixed-language text is handled automatically
+
+## Keyboard Shortcuts Reference
+
+| Action | Default Shortcut | Customizable |
+|--------|-----------------|-------------|
+| Trigger capture | `⇧⌘2` | ✅ Yes |
+| Cancel capture | `Esc` | ❌ No (system default) |
+| Paste extracted text | `⌘V` | ❌ No (system default) |
+
+<Note>
+  You can change the capture hotkey in Settings to any keyboard combination that doesn't conflict with other apps.
+</Note>
+
+## What Happens After Capture?
+
+After a successful capture, Text Shot provides visual feedback based on your settings:
+
+### With Confirmation Enabled (Default)
+
+A toast notification appears in the center of your screen:
+
+```swift
+// From ToastPresenter.swift
+func show(_ message: String) {
+    messageLabel.stringValue = message  // "Copied!" or "No text"
+    panel.orderFrontRegardless()
+    
+    NSAnimationContext.runAnimationGroup { context in
+        context.duration = 0.14
+        context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        panel.animator().alphaValue = 1
+    }
+    
+    // Auto-hide after 2 seconds
+    DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+        self.hide()
+    }
+}
+```
+
+The toast uses native macOS visual effects (blur, shadow) and fades in/out smoothly.
+
+### With Confirmation Disabled
+
+Text is copied silently to your clipboard with no visual feedback. This is useful for rapid consecutive captures.
+
+### Duplicate Detection
+
+Text Shot tracks the last copied text to avoid clipboard pollution:
+
+```swift
+// From AppController.swift
+if text == lastCopiedText {
+    clipboardService.write(text)  // Write again but don't show toast
+    return
+}
+
+clipboardService.write(text)
+lastCopiedText = text
+showToastIfEnabled("Copied!")  // Only show toast for new text
+```
+
+If you capture the exact same text twice, the confirmation toast is suppressed.
+
+## Troubleshooting Common Issues
+
+### "No text" Result
+
+**Possible causes:**
+- Text too small or blurry
+- Poor contrast between text and background
+- Stylized fonts or handwriting
+- Selected region contains no actual text
+
+**Solutions:**
+- Zoom in on the content before capturing
+- Increase screen brightness or contrast
+- Capture a larger region
+- Try capturing clearer source material
+
+### Incorrect Text Extraction
+
+**Possible causes:**
+- Low-resolution source
+- Complex text layout or overlapping elements
+- Unusual fonts or styling
+
+**Solutions:**
+- Capture at higher zoom levels
+- Select smaller, cleaner text regions
+- Manually verify and correct extracted text
+
+### Hotkey Not Triggering
+
+**Check these:**
+1. Text Shot icon appears in menu bar (app is running)
+2. Screen Recording permission is granted
+3. Hotkey doesn't conflict with another app
+4. You're using at least one modifier key
+
+<Warning>
+  If your hotkey uses Option without Command/Control on macOS 15+, it may not fire reliably. Add Command or Control to your shortcut.
+</Warning>
+
+## Next Steps
+
+You're now ready to use Text Shot productively! Here are some ways to go further:
+
+<CardGroup cols={2}>
+  <Card title="Customize Settings" icon="sliders">
+    Open Settings to customize your hotkey, enable Launch at Login, or disable confirmation toasts.
+  </Card>
+  
+  <Card title="Build from Source" icon="code">
+    Developers can build Text Shot locally using the instructions in the GitHub repository README.
+  </Card>
+  
+  <Card title="Report Issues" icon="bug">
+    Found a bug or have a feature request? Open an issue on the GitHub repository.
+  </Card>
+  
+  <Card title="Privacy & Security" icon="shield">
+    Learn more about how Text Shot protects your data in the SECURITY.md file.
+  </Card>
+</CardGroup>
+
+## Performance Expectations
+
+**Typical workflow timing:**
+
+| Phase | Duration |
+|-------|----------|
+| Hotkey to crosshair | < 0.1s |
+| Region selection | 1-2s (user-controlled) |
+| Capture to file | < 0.2s |
+| OCR processing | 0.5-2s (depends on image size) |
+| Clipboard copy | < 0.1s |
+| **Total** | **2-5 seconds** |
+
+The OCR processing time depends on:
+- Image resolution and complexity
+- Amount of text in the region
+- Your Mac's CPU performance (Apple Silicon is faster)
+- Recognition level (accurate vs. fast)
+
+<Note>
+  Text Shot processes OCR entirely on-device using your Mac's CPU/GPU. There's no network latency since nothing is uploaded to the cloud.
+</Note>
+
+## Workflow Integration
+
+Text Shot is designed to integrate seamlessly into your existing workflows:
+
+### With Text Editors
+
+Capture text and paste directly into:
+- VS Code, Sublime Text, Atom
+- TextEdit, BBEdit, Nova
+- Vim, Emacs (in macOS terminal)
+
+### With Note-Taking Apps
+
+Enrich your notes with extracted text:
+- Apple Notes, Obsidian, Notion
+- Bear, Evernote, OneNote
+- Roam Research, Logseq
+
+### With Communication Tools
+
+Share extracted text instantly:
+- Slack, Discord, Microsoft Teams
+- Messages, WhatsApp, Telegram
+- Email clients
+
+### With Development Tools
+
+Extract code, errors, and logs:
+- Paste into GitHub issues or PRs
+- Copy error messages for debugging
+- Extract code from tutorials or screenshots
+- Pull text from terminal screenshots
+
+## You're All Set!
+
+You've successfully completed your first Text Shot capture and learned the core workflow. Text Shot is now ready to help you extract text from any on-screen content.
+
+**Remember:**
+- Press your hotkey (`⇧⌘2` by default) to trigger captures
+- Select the region containing text
+- Paste with `⌘V` anywhere
+- Customize settings to match your preferences
+
+Happy capturing! 🎉

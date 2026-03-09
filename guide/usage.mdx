@@ -1,0 +1,219 @@
+---
+title: Usage
+description: Learn how to capture screenshots and extract text with Text Shot
+---
+
+## Capture Workflow
+
+Text Shot provides a streamlined keyboard-driven workflow for extracting text from any part of your screen.
+
+### Basic Capture Flow
+
+1. **Trigger capture** - Press your hotkey (default: `⌘⇧2`)
+2. **Select region** - Click and drag to select the area containing text
+3. **Wait for OCR** - Text Shot processes the image using Apple Vision
+4. **Text copied** - Extracted text is automatically copied to your clipboard
+5. **Confirmation** - A toast notification confirms the operation (if enabled)
+
+<Note>
+The entire capture flow is handled automatically. Once you select a region, Text Shot takes care of everything else.
+</Note>
+
+## How OCR Works
+
+Text Shot uses Apple's Vision framework to perform on-device optical character recognition. The OCR process is sophisticated and includes intelligent retry logic to ensure the best possible results.
+
+### Multi-Level Recognition Strategy
+
+When you capture a screenshot, Text Shot attempts OCR using a three-stage retry chain:
+
+```swift
+[
+  (.accurate, languageCorrection: true),   // Stage 1: Best quality
+  (.accurate, languageCorrection: false),  // Stage 2: Accurate without correction
+  (.fast, languageCorrection: true)        // Stage 3: Fast mode as fallback
+]
+```
+
+<Accordion title="Why multiple recognition attempts?">
+Text Shot tries up to three different OCR configurations to maximize success:
+
+- **Stage 1**: Accurate recognition with language correction enabled - best for general text
+- **Stage 2**: Accurate recognition without language correction - better for code, URLs, or technical content
+- **Stage 3**: Fast recognition with correction - a final attempt for difficult images
+
+The process stops as soon as any stage returns non-empty text, ensuring the best result without unnecessary processing.
+</Accordion>
+
+### Text Cleanup and Normalization
+
+After OCR completes, Text Shot automatically cleans up the extracted text:
+
+- **Line ending normalization** - Converts `\r\n` to `\n`
+- **Trailing whitespace removal** - Strips spaces/tabs from end of lines
+- **Noise filtering** - Removes lines containing only OCR artifacts (e.g., `|||`, `~~~`, `:.:.:.:`)  
+- **Blank line collapsing** - Reduces multiple consecutive blank lines to maximum of two
+- **Trim final output** - Removes leading/trailing whitespace
+
+<Info>
+The cleanup process is conservative and preserves intentional formatting while removing common OCR noise.
+</Info>
+
+## Clipboard Integration
+
+Text Shot integrates seamlessly with the macOS clipboard:
+
+### Automatic Copy Behavior
+
+When text is successfully extracted:
+
+1. Previous clipboard contents are cleared
+2. New text is written to the clipboard
+3. Text is ready to paste immediately with `⌘V`
+
+```swift
+let pasteboard = NSPasteboard.general
+pasteboard.clearContents()
+pasteboard.setString(text, forType: .string)
+```
+
+### Duplicate Detection
+
+Text Shot remembers the last text it copied. If you capture the same text again, it's still copied to the clipboard but no confirmation toast is shown (to avoid noise).
+
+<Tip>
+This is helpful when you need to recapture the same text - the duplicate detection prevents repetitive notifications.
+</Tip>
+
+## Toast Confirmation Notifications
+
+Text Shot provides visual feedback for all capture operations through elegant toast notifications.
+
+### Toast Messages
+
+| Scenario | Message | Description |
+|----------|---------|-------------|
+| Success | "Copied!" | Text was extracted and copied to clipboard |
+| No text found | "No text" | OCR completed but found no recognizable text |
+| Capture failed | "Capture failed" | Screenshot capture encountered an error |
+| OCR error | "Error" | OCR processing failed unexpectedly |
+
+### Toast Appearance
+
+- **Position**: Center of the screen containing your mouse cursor
+- **Duration**: 2 seconds (0.14s fade in, 2s hold, 0.22s fade out)
+- **Style**: HUD window with blur effect and shadow
+- **Level**: Appears above most windows but below system alerts
+
+<Note>
+Toast notifications can be disabled entirely in Settings if you prefer silent operation.
+</Note>
+
+## Tips for Best OCR Results
+
+<CardGroup cols={2}>
+  <Card title="Use High Contrast" icon="adjust">
+    Capture text with clear contrast between text and background. Dark text on light backgrounds (or vice versa) works best.
+  </Card>
+  
+  <Card title="Capture Clean Text" icon="sparkles">
+    Avoid capturing text with complex backgrounds, gradients, or patterns. Simple, clean backgrounds yield the best results.
+  </Card>
+  
+  <Card title="Select Generously" icon="expand">
+    Include a small margin around the text you want to capture. Don't crop too tightly to the text edges.
+  </Card>
+  
+  <Card title="Avoid Tiny Text" icon="magnifying-glass">
+    Text Shot can handle various sizes, but very small text (< 10pt) may not be recognized reliably.
+  </Card>
+</CardGroup>
+
+## Common Usage Patterns
+
+### Extracting Code from Screenshots
+
+<Steps>
+  <Step title="Capture the code region">
+    Press your hotkey and select the code area from a screenshot or video.
+  </Step>
+  
+  <Step title="Wait for processing">
+    Text Shot will use accurate mode without language correction - better for code syntax.
+  </Step>
+  
+  <Step title="Paste into editor">
+    Press `⌘V` to paste the extracted code directly into your editor.
+  </Step>
+</Steps>
+
+<Warning>
+OCR is not 100% accurate for code. Always review extracted code carefully before using it.
+</Warning>
+
+### Copying Text from Videos or PDFs
+
+1. **Pause the video** or navigate to the PDF page
+2. **Trigger Text Shot** with your hotkey
+3. **Select the text area** you want to extract
+4. **Paste immediately** - text is ready in your clipboard
+
+### Capturing Multi-Language Text
+
+Text Shot uses Apple Vision which supports many languages automatically:
+
+- English, Spanish, French, German, Italian, Portuguese
+- Chinese (Simplified and Traditional), Japanese, Korean
+- And many more
+
+<Info>
+Language detection is automatic - you don't need to configure anything.
+</Info>
+
+## Workflow Integration
+
+### Using with Automation Tools
+
+Since Text Shot places text directly on your clipboard, it works seamlessly with automation tools:
+
+- **Keyboard Maestro**: Trigger Text Shot, wait briefly, then use clipboard variable
+- **Alfred**: Capture text and process it with clipboard workflows  
+- **Hammerspoon**: Monitor clipboard changes to process captured text
+- **AppleScript**: Read from clipboard after Text Shot completes
+
+### Quick Capture and Paste
+
+The fastest workflow:
+
+```
+1. Focus target application where you want to paste
+2. Press Text Shot hotkey
+3. Select text region
+4. Press ⌘V to paste immediately
+```
+
+<Tip>
+You can press `⌘V` even before the toast appears - the text is copied as soon as OCR completes.
+</Tip>
+
+## Canceling a Capture
+
+You can cancel the capture at any time:
+
+- **Press `Esc`** during region selection
+- **Click outside** the capture area without selecting
+
+When canceled, no toast notification appears and your clipboard remains unchanged.
+
+## Performance Characteristics
+
+Typical capture timings:
+
+- **Screenshot capture**: < 0.1 seconds
+- **OCR processing**: 0.5-2 seconds (depends on image complexity)
+- **Clipboard copy**: Instant
+- **Toast notification**: 2 seconds (if enabled)
+
+<Info>
+All processing happens on-device using Apple's Neural Engine. No internet connection required.
+</Info>

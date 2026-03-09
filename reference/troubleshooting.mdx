@@ -1,0 +1,275 @@
+---
+title: Troubleshooting
+description: Common issues and solutions for Text Shot
+---
+
+## Common Issues
+
+This page covers the most common issues users encounter with Text Shot and how to resolve them. Most problems are related to macOS permissions or hotkey conflicts.
+
+<Accordion title="Screen Recording Permission Denied">
+  <Warning>
+    This is the most common issue. Text Shot requires Screen Recording permission to capture screen regions using the macOS `screencapture` utility.
+  </Warning>
+
+  ### Symptoms
+  - Hotkey triggers but nothing happens
+  - Toast notification shows "Capture failed"
+  - No screen selection crosshair appears
+
+  ### Solution
+  1. Open **System Settings** > **Privacy & Security** > **Screen Recording**
+  2. Find **Text Shot** in the list
+  3. Toggle it **ON** (check the checkbox)
+  4. **Restart Text Shot** from the menu bar
+  5. Try the capture hotkey again
+
+  ### Technical Details
+  Text Shot uses `/usr/sbin/screencapture -i -x` to capture screen regions. This requires Screen Recording permission as of macOS 10.15+. The app detects permission errors by checking for specific error messages:
+  - "screen recording"
+  - "not authorized"
+  - "not permitted"
+  - "permission denied"
+  - "denied by tcc"
+
+  See `CaptureService.swift:88-98` for the permission detection logic.
+</Accordion>
+
+<Accordion title="Hotkey Not Working">
+  ### Possible Causes
+  - Hotkey conflicts with another application
+  - Invalid shortcut configuration
+  - Hotkey registration failed
+  - macOS 15 Option-only shortcut issues
+
+  ### Solution: Check for Conflicts
+  1. Open Text Shot settings from the menu bar
+  2. Try changing to a different hotkey combination
+  3. Avoid shortcuts already used by system or other apps:
+     - **Cmd+Shift+3/4/5**: Built-in macOS screenshot tools
+     - **Cmd+Space**: Spotlight
+     - **Cmd+Tab**: App switcher
+
+  ### Solution: Reset to Default
+  The default hotkey is **Cmd+Shift+2**. If your custom hotkey isn't working:
+  1. Open Text Shot settings
+  2. Clear the current hotkey field
+  3. Press **Cmd+Shift+2** to set the default
+  4. Click outside the field to apply
+
+  ### macOS 15 Warning
+  <Warning>
+    Option-only shortcuts (without Command or Control) may not fire reliably on macOS 15. Prefer combinations with Command or Control.
+  </Warning>
+
+  This guardrail is checked in `HotkeyManager.swift:60-76`.
+
+  ### Validation Rules
+  Text Shot enforces these hotkey rules (`HotkeyManager.swift:50-58`):
+  - Must include at least one modifier key (Cmd, Option, Control, Shift)
+  - **OR** must be an F-key (F1-F20) without modifiers
+  - Empty shortcuts are not allowed
+
+  ### Check Logs
+  If hotkey registration fails silently, Text Shot will fall back to the default shortcut on next launch.
+</Accordion>
+
+<Accordion title="OCR Not Recognizing Text">
+  ### Common Causes
+  - Low image quality or resolution
+  - Text too small or blurry
+  - Unusual fonts or handwriting
+  - Non-standard language characters
+
+  ### How Text Shot Handles OCR
+  Text Shot uses **Apple Vision framework** with an automatic retry strategy:
+
+  1. **First attempt**: Accurate mode + language correction
+  2. **Second attempt**: Accurate mode without correction
+  3. **Third attempt**: Fast mode + language correction
+
+  If all three attempts return empty results, you'll see a "No text" toast.
+
+  See `OCRService.swift:15-34` for the retry logic.
+
+  ### Tips for Better Recognition
+  - Capture a larger region with more context
+  - Ensure text is clearly visible and high contrast
+  - Avoid capturing text at extreme angles
+  - Try increasing screen resolution or zoom level
+  - For code or technical content, use monospace fonts when possible
+
+  ### Supported Languages
+  Text Shot supports all languages available in Apple's Vision framework, including:
+  - English, Spanish, French, German, Italian, Portuguese
+  - Chinese (Simplified/Traditional), Japanese, Korean
+  - Russian, Arabic, and many more
+
+  No configuration needed - Vision automatically detects the language.
+</Accordion>
+
+<Accordion title="App Not Launching">
+  ### Symptoms
+  - Double-clicking the app does nothing
+  - App crashes immediately on launch
+  - Menu bar icon doesn't appear
+
+  ### Solution: Check macOS Version
+  <Info>
+    Text Shot requires **macOS 13 (Ventura) or later**.
+  </Info>
+
+  To check your macOS version:
+  1. Click the Apple menu > **About This Mac**
+  2. Look for the version number (e.g., "macOS 14.2")
+
+  If you're on macOS 12 or earlier, you'll need to update your OS.
+
+  ### Solution: Check Gatekeeper
+  If you downloaded Text Shot from GitHub (not the App Store):
+  1. Right-click the app in Finder
+  2. Select **Open**
+  3. Click **Open** in the security dialog
+  4. This adds an exception for this specific app
+
+  ### Solution: Reset Launch Agents
+  If the app was working but stopped:
+  ```bash
+  # Remove launch agent (if using Launch at Login)
+  launchctl remove com.textshot.launcher
+  
+  # Restart Text Shot manually
+  open -a "Text Shot"
+  ```
+
+  ### Check Console Logs
+  For advanced debugging:
+  1. Open **Console.app**
+  2. Filter for "Text Shot" in the search box
+  3. Launch the app and watch for error messages
+  4. Look for permission errors, missing dependencies, or crashes
+</Accordion>
+
+<Accordion title="Clipboard Not Working">
+  ### Symptoms
+  - "Copied!" toast appears but nothing pastes
+  - Old clipboard content remains
+  - Text copied but in wrong format
+
+  ### Solution: Check Clipboard Access
+  1. Try pasting into different apps (TextEdit, Notes, browser)
+  2. Check if other apps can read the clipboard
+  3. Restart Text Shot from the menu bar
+
+  ### How Clipboard Works
+  Text Shot uses `NSPasteboard.general` to write plain text to the system clipboard (`ClipboardService.swift:9-12`):
+  ```swift
+  pasteboard.clearContents()
+  pasteboard.setString(text, forType: .string)
+  ```
+
+  This is the standard macOS clipboard API - no special permissions required.
+
+  ### Duplicate Detection
+  <Note>
+    If you capture the exact same text twice in a row, Text Shot will copy it again but won't show a "Copied!" toast the second time. This prevents notification spam during repeated captures.
+  </Note>
+
+  See `AppController.swift:209-216` for this behavior.
+
+  ### Third-Party Clipboard Managers
+  Some clipboard managers may interfere with Text Shot. Try temporarily disabling them to test.
+</Accordion>
+
+<Accordion title="Settings Not Persisting">
+  ### Symptoms
+  - Hotkey resets to default after restart
+  - "Launch at Login" setting doesn't save
+  - "Show confirmation toast" resets
+
+  ### Solution: Check File Permissions
+  Settings are stored in:
+  ```
+  ~/Library/Application Support/Text Shot/settings-v3.json
+  ```
+
+  Check if this directory is writable:
+  ```bash
+  ls -la ~/Library/Application\ Support/Text\ Shot/
+  ```
+
+  ### Solution: Delete Corrupted Settings
+  If settings are corrupted:
+  ```bash
+  rm ~/Library/Application\ Support/Text\ Shot/settings-v3.json
+  ```
+
+  Text Shot will recreate the file with defaults on next launch.
+
+  ### Migration from Older Versions
+  Text Shot automatically migrates settings from older versions:
+  - `settings-v2.json` (version 2)
+  - `settings.json` (version 1)
+  - `text-shot/settings.json` (very old installs)
+
+  See `SettingsModel.swift:138-159` for migration logic.
+
+  ### Settings Schema
+  Current settings structure (v3):
+  ```json
+  {
+    "schemaVersion": 3,
+    "hotkey": "⇧⌘2",
+    "showConfirmation": true,
+    "launchAtLogin": false,
+    "lastPermissionPromptAt": 0
+  }
+  ```
+</Accordion>
+
+<Accordion title="Toast Notification Not Appearing">
+  ### Possible Causes
+  - "Show confirmation toast" disabled in settings
+  - macOS notification permissions
+  - Display/monitor configuration issues
+
+  ### Solution: Check Settings
+  1. Open Text Shot settings
+  2. Ensure **"Show confirmation toast"** is checked
+  3. Try capturing again
+
+  ### How Toasts Work
+  Text Shot shows small confirmation toasts for:
+  - **"Copied!"** - Text successfully copied to clipboard
+  - **"No text"** - OCR found no text in the captured region
+  - **"Capture failed"** - Screen capture failed (usually permissions)
+  - **"Error"** - OCR processing error
+
+  See `AppController.swift:158-162` for toast logic.
+
+  ### Disable Toasts
+  If you prefer silent operation, disable toasts in settings. Text Shot will still copy text to your clipboard - you just won't see confirmation messages.
+</Accordion>
+
+## Getting Help
+
+<Info>
+  If you're still experiencing issues after trying these solutions:
+
+  1. Check the [FAQ](/reference/faq) for additional questions
+  2. Review [Security & Privacy](/reference/security) for permission details
+  3. Open an issue on [GitHub](https://github.com) with:
+     - macOS version
+     - Text Shot version
+     - Steps to reproduce
+     - Console.app logs (filter for "Text Shot")
+</Info>
+
+## Debug Information
+
+For bug reports, include:
+- **macOS version**: System Settings > About This Mac
+- **Text Shot version**: Check the DMG filename or About menu
+- **Settings location**: `~/Library/Application Support/Text Shot/`
+- **Console logs**: Console.app > Filter: "Text Shot"
+- **Permissions**: System Settings > Privacy & Security > Screen Recording

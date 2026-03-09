@@ -1,0 +1,339 @@
+---
+title: Installation
+description: Step-by-step guide to installing and configuring Text Shot on macOS
+---
+
+## Installation Overview
+
+Text Shot is distributed as a standard macOS application. Installation takes less than 5 minutes and requires no technical expertise.
+
+<Steps>
+  <Step title="Download the DMG">
+    Visit the [GitHub Releases](https://github.com/yourusername/text-shot/releases) page and download the latest `Text-Shot.dmg` file.
+    
+    The DMG is a lightweight ~2 MB download that includes the complete application.
+  </Step>
+
+  <Step title="Open the DMG">
+    Double-click the downloaded `Text-Shot.dmg` file to mount it.
+    
+    A Finder window will appear with the Text Shot app icon.
+  </Step>
+
+  <Step title="Move to Applications">
+    Drag the **Text Shot** icon to your **Applications** folder.
+    
+    <Warning>
+      Always move Text Shot to your Applications folder before launching. Running directly from the DMG may cause permission issues.
+    </Warning>
+    
+    This ensures Text Shot has the correct permissions and can be found by macOS services like Launch at Login.
+  </Step>
+
+  <Step title="Launch the App">
+    Navigate to your Applications folder and double-click **Text Shot** to launch it.
+    
+    <Note>
+      If you see a warning that Text Shot is from an unidentified developer, go to **System Settings → Privacy & Security** and click "Open Anyway".
+    </Note>
+    
+    Text Shot will appear in your menu bar (top-right corner) with a small icon. It runs silently in the background until you trigger a capture.
+  </Step>
+
+  <Step title="Grant Screen Recording Permission">
+    On first launch, macOS will prompt you to grant **Screen Recording** permission.
+    
+    <Warning>
+      Screen Recording permission is **required** for Text Shot to capture screen regions. The app cannot function without this permission.
+    </Warning>
+    
+    **To grant permission:**
+    
+    1. When prompted, click **Open System Settings**
+    2. In the **Privacy & Security → Screen Recording** section, enable the checkbox next to **Text Shot**
+    3. You may need to quit and relaunch Text Shot after enabling the permission
+    
+    **Why this permission is required:**
+    
+    Text Shot uses the macOS `screencapture` utility to capture the screen region you select:
+    
+    ```swift
+    // From CaptureService.swift
+    func captureRegion() async -> CaptureResult {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+        process.arguments = ["-i", "-x", outputPath]
+        try process.run()
+        // ...
+    }
+    ```
+    
+    This permission allows the system `screencapture` tool to access your screen contents.
+  </Step>
+
+  <Step title="Set Your Hotkey">
+    Click the Text Shot icon in your menu bar and select **Settings**.
+    
+    The default hotkey is **`⇧⌘2`** (Shift + Command + 2), but you can customize it to any keyboard shortcut:
+    
+    1. Click in the **Global Hotkey** field
+    2. Press your desired key combination
+    3. The hotkey will be saved automatically
+    
+    <Note>
+      Text Shot validates hotkeys to ensure they work reliably. You must use at least one modifier key (Command, Option, Control, or Shift) unless you choose an F-key (F1-F20).
+    </Note>
+    
+    **Hotkey validation rules:**
+    
+    ```swift
+    // From HotkeyManager.swift
+    static func validateNoModifierRule(_ shortcut: AppHotkeyShortcut?) throws {
+        guard let shortcut else { return }
+        
+        // Allow F-keys without modifiers, or any key with modifiers
+        guard isAllowedNoModifierShortcut(shortcut) || hasAnyModifier(shortcut) else {
+            throw HotkeyApplyError.invalidShortcut
+        }
+    }
+    ```
+    
+    <Warning>
+      Avoid Option-only shortcuts on macOS 15+ (e.g., Option + K) as they may not fire reliably. Prefer adding Command or Control to your shortcut.
+    </Warning>
+  </Step>
+</Steps>
+
+## Optional Configuration
+
+After installation, you can customize Text Shot's behavior through the Settings window.
+
+### Launch at Login
+
+Enable **Launch at Login** to start Text Shot automatically when you log in to macOS:
+
+1. Open Text Shot settings
+2. Toggle **Launch at Login** to On
+3. Text Shot will now start automatically on every boot
+
+```swift
+// From LaunchAtLoginService.swift
+func apply(enabled: Bool) {
+    if enabled {
+        try SMAppService.mainApp.register()
+    } else {
+        try SMAppService.mainApp.unregister()
+    }
+}
+```
+
+This uses macOS 13+ native login item APIs for reliable background startup.
+
+### Show Confirmation Pulse
+
+Enable **Show Confirmation Pulse** to see a visual toast notification when text is successfully copied:
+
+- **Enabled** (default): A "Copied!" message appears in the center of your screen for 2 seconds
+- **Disabled**: Text is copied silently to your clipboard with no visual feedback
+
+```swift
+// From AppController.swift
+private func showToastIfEnabled(_ message: String) {
+    if currentSettings.showConfirmation {
+        toastPresenter.show(message)
+    }
+}
+```
+
+The toast uses native macOS visual effects with smooth animations:
+
+```swift
+// From ToastPresenter.swift  
+private let holdDuration: TimeInterval = 2.0
+private let enterDuration: TimeInterval = 0.14
+private let exitDuration: TimeInterval = 0.22
+```
+
+<Note>
+  The confirmation toast uses a HUD-style window that appears above all other windows. It's designed to be non-intrusive and automatically fades out.
+</Note>
+
+## Settings Storage
+
+Text Shot stores your settings in a JSON file at:
+
+```bash
+~/Library/Application Support/Text Shot/settings-v3.json
+```
+
+The settings file is human-readable and includes:
+
+```json
+{
+  "hotkey": "⇧⌘2",
+  "launchAtLogin": false,
+  "schemaVersion": 3,
+  "showConfirmation": true
+}
+```
+
+<Warning>
+  Do not manually edit the settings file while Text Shot is running. Changes may be overwritten. Use the Settings UI instead.
+</Warning>
+
+### Settings Migration
+
+Text Shot automatically migrates settings from older versions:
+
+```swift
+// From SettingsModel.swift - SettingsMigrator
+func prepareStore() throws -> SettingsStoreV2 {
+    let targetURL = settingsDirectory.appendingPathComponent("settings-v3.json")
+    
+    if !fileManager.fileExists(atPath: targetURL.path) {
+        // Migrate from settings.json, settings-v2.json, etc.
+        let migrated = migrateSettingsIfAvailable() ?? .defaults
+        try store.save(migrated)
+    }
+    
+    return store
+}
+```
+
+Your hotkey, confirmation preference, and Launch at Login settings will be preserved when upgrading.
+
+## Verifying Installation
+
+After completing installation, verify Text Shot is working correctly:
+
+<Steps>
+  <Step title="Check Menu Bar Icon">
+    Look for the Text Shot icon in your menu bar (top-right corner).
+    
+    If you don't see it, Text Shot may not be running. Launch it from your Applications folder.
+  </Step>
+
+  <Step title="Test Screen Recording Permission">
+    Try triggering a capture with your hotkey.
+    
+    If you see the crosshair cursor and can select a region, Screen Recording permission is working correctly.
+    
+    If nothing happens, check **System Settings → Privacy & Security → Screen Recording** and ensure Text Shot is enabled.
+  </Step>
+
+  <Step title="Perform a Test Capture">
+    Open any window with text, press your hotkey, select the text region, and paste into a text editor.
+    
+    If the extracted text appears correctly, installation is complete!
+  </Step>
+</Steps>
+
+## Troubleshooting
+
+### Hotkey Not Working
+
+<Warning>
+  If your hotkey conflicts with another app, it may not trigger reliably. Choose a unique keyboard shortcut.
+</Warning>
+
+**Check these common issues:**
+
+1. **Permission not granted**: Verify Screen Recording permission is enabled
+2. **Conflicting hotkey**: Another app may be using the same shortcut
+3. **Invalid shortcut**: Ensure you're using at least one modifier key (or an F-key)
+4. **App not running**: Check that Text Shot icon appears in the menu bar
+
+### Screen Recording Permission Denied
+
+If Text Shot cannot capture your screen:
+
+1. Open **System Settings → Privacy & Security → Screen Recording**
+2. Find **Text Shot** in the list
+3. Enable the checkbox next to it
+4. **Quit and relaunch Text Shot** (important!)
+
+```swift
+// From ScreenCapturePermissionService.swift
+func requestIfNeededOncePerLaunch() -> Bool {
+    if authorizationAPI.preflight() {
+        return true  // Already authorized
+    }
+    
+    // Request permission once per launch
+    didRequestThisLaunch = true
+    return authorizationAPI.request()
+}
+```
+
+macOS requires apps to restart after granting Screen Recording permission.
+
+### App Won't Launch
+
+If Text Shot fails to launch:
+
+1. **Check macOS version**: Text Shot requires macOS 13.0 (Ventura) or later
+2. **Verify location**: Ensure the app is in your Applications folder, not running from the DMG
+3. **Check Gatekeeper**: Go to **System Settings → Privacy & Security** and look for a message about Text Shot being blocked
+4. **Try removing quarantine attribute**:
+   ```bash
+   xattr -d com.apple.quarantine /Applications/Text\ Shot.app
+   ```
+
+### "No Text" Message
+
+If Text Shot shows a "No text" message after capture:
+
+- The selected region may not contain recognizable text
+- Try capturing a larger region or selecting clearer text
+- Ensure the text is large enough and has sufficient contrast
+
+Text Shot uses Apple Vision's OCR with automatic fallback:
+
+```swift
+// From OCRService.swift
+private let retryChain: [(RecognitionLevel, Bool)] = [
+    (.accurate, true),   // Accurate with language correction
+    (.accurate, false),  // Accurate without correction  
+    (.fast, true)        // Fast mode as fallback
+]
+```
+
+If no text is detected after all three attempts, the region likely doesn't contain machine-readable text.
+
+## Uninstalling Text Shot
+
+To completely remove Text Shot from your Mac:
+
+<Steps>
+  <Step title="Quit Text Shot">
+    Click the Text Shot menu bar icon and select **Quit**.
+  </Step>
+
+  <Step title="Delete the Application">
+    Move **Text Shot.app** from your Applications folder to the Trash.
+  </Step>
+
+  <Step title="Remove Settings (Optional)">
+    Delete the settings directory:
+    
+    ```bash
+    rm -rf ~/Library/Application\ Support/Text\ Shot
+    ```
+    
+    This removes your saved hotkey and preferences.
+  </Step>
+
+  <Step title="Remove Login Item (Optional)">
+    If you enabled Launch at Login, macOS will automatically remove the login item when you delete the app.
+    
+    To verify, check **System Settings → General → Login Items** and remove Text Shot if it still appears.
+  </Step>
+</Steps>
+
+## Next Steps
+
+Now that Text Shot is installed, learn how to use it effectively:
+
+<Card title="Quickstart Guide" icon="rocket" href="/quickstart">
+  Complete your first capture and learn the core workflow
+</Card>

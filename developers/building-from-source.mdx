@@ -1,0 +1,377 @@
+---
+title: Building from Source
+description: Complete guide to building Text Shot locally on macOS
+icon: hammer
+---
+
+Text Shot is a native Swift application built using Swift Package Manager. This guide walks you through building the app from source on your Mac.
+
+## Prerequisites
+
+Before building Text Shot, ensure you have the following installed:
+
+<CardGroup cols={2}>
+  <Card title="macOS 13+" icon="apple">
+    Required for Swift 5.9 and modern macOS APIs
+  </Card>
+  <Card title="Xcode Command Line Tools" icon="terminal">
+    Provides `swift`, `xcodebuild`, `codesign`, and `hdiutil`
+  </Card>
+  <Card title="Node.js & npm" icon="node-js">
+    Used for build scripts and version management
+  </Card>
+  <Card title="Git" icon="git">
+    For cloning the repository
+  </Card>
+</CardGroup>
+
+<Note>
+  Install Xcode Command Line Tools with:
+  ```bash
+  xcode-select --install
+  ```
+</Note>
+
+## Quick Start
+
+<Steps>
+  <Step title="Clone the repository">
+    ```bash
+    git clone https://github.com/yourusername/text-shot.git
+    cd text-shot
+    ```
+  </Step>
+
+  <Step title="Install dependencies">
+    ```bash
+    npm install
+    ```
+    
+    <Note>
+      This doesn't install Node dependencies—Text Shot has none. It simply prepares the build environment.
+    </Note>
+  </Step>
+
+  <Step title="Build the app">
+    ```bash
+    npm run build
+    ```
+    
+    This creates a universal binary (ARM64 + x86_64) in `bin/Text Shot.app`.
+  </Step>
+
+  <Step title="Launch the app">
+    ```bash
+    npm start
+    ```
+    
+    Opens the built app bundle. Grant Screen Recording permission when prompted.
+  </Step>
+</Steps>
+
+## Build Scripts
+
+Text Shot uses shell scripts in the `scripts/` directory for all build operations.
+
+### Main Build Script
+
+The `build-settings-app.sh` script orchestrates the entire build process:
+
+```bash
+npm run build
+# or directly:
+bash scripts/build-settings-app.sh
+```
+
+**What it does:**
+
+1. **Dual Architecture Compilation**: Builds separate ARM64 and x86_64 binaries using Swift Package Manager
+   ```bash
+   swift build --package-path native/settings-app -c release --arch arm64
+   swift build --package-path native/settings-app -c release --arch x86_64
+   ```
+
+2. **Universal Binary Creation**: Uses `lipo` to create a fat binary supporting both architectures
+   ```bash
+   lipo -create arm64/text-shot x86_64/text-shot -output text-shot
+   ```
+
+3. **App Bundle Assembly**: Creates the `.app` bundle structure with:
+   - Executable in `Contents/MacOS/Text Shot`
+   - App icon (`app_icon.icns`) in `Contents/Resources/`
+   - Third-party notices in `Contents/Resources/ThirdPartyNotices.txt`
+   - Generated `Info.plist` with version from `package.json`
+
+4. **Code Signing**: Signs the app bundle with either:
+   - Developer ID (if `APPLE_DEVELOPER_ID_APP` environment variable is set)
+   - Ad-hoc signature for local development
+
+<Note>
+Builds use `/tmp` for SwiftPM scratch builds to avoid SQLite I/O issues with iCloud Drive.
+</Note>
+
+### Build Configuration
+
+The build reads the app version from `package.json`:
+
+```json package.json
+{
+  "name": "text-shot",
+  "version": "2.9.0",
+  "scripts": {
+    "build": "bash scripts/build-settings-app.sh",
+    "start": "open \"./bin/Text Shot.app\"",
+    "dev": "npm run build && npm run start"
+  }
+}
+```
+
+The generated `Info.plist` includes:
+- `CFBundleShortVersionString`: Version from package.json (e.g., "2.9.0")
+- `CFBundleVersion`: Build timestamp (e.g., "202603092145")
+- `LSMinimumSystemVersion`: "13.0" (macOS Ventura minimum)
+- `LSUIElement`: `true` (runs as menu bar app, no Dock icon)
+
+## Entitlements and Signing
+
+Text Shot requires specific entitlements for its functionality. These are defined in `build/entitlements.mac.plist`:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>com.apple.security.cs.allow-jit</key>
+  <true/>
+  <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+  <true/>
+  <key>com.apple.security.cs.disable-library-validation</key>
+  <true/>
+</dict>
+</plist>
+```
+
+<Warning>
+These entitlements are necessary for Swift runtime compatibility but require Developer ID signing for distribution.
+</Warning>
+
+### Development Signing
+
+For local development, the build script uses ad-hoc signing:
+
+```bash
+codesign --force --deep --sign - --identifier "com.textshot.app" "Text Shot.app"
+```
+
+### Distribution Signing
+
+For distribution, set the `APPLE_DEVELOPER_ID_APP` environment variable:
+
+```bash
+export APPLE_DEVELOPER_ID_APP="Developer ID Application: Your Name (TEAM_ID)"
+npm run build
+```
+
+This enables hardened runtime and timestamping:
+
+```bash
+codesign --force --deep --options runtime --timestamp \
+  --sign "$APPLE_DEVELOPER_ID_APP" \
+  --identifier "com.textshot.app" "Text Shot.app"
+```
+
+## Running Tests
+
+Text Shot includes comprehensive unit tests for all core services.
+
+### Run All Tests
+
+```bash
+npm test
+# or directly:
+bash scripts/test-native.sh
+```
+
+This runs Swift Package Manager tests:
+
+```bash
+swift test --package-path native/settings-app --scratch-path /tmp/text-shot-settings-test
+```
+
+### Test Coverage
+
+The test suite covers:
+
+- **AppControllerCaptureFlowTests**: End-to-end capture workflow
+- **CaptureServiceTests**: Screenshot capture via `screencapture`
+- **OCRServiceTests**: Vision framework text recognition
+- **HotkeyManagerTests**: Global hotkey registration and validation
+- **SettingsViewModelTests**: Settings UI logic
+- **SettingsMigratorTests**: Settings migration from previous versions
+- **SettingsFileStoreTests**: JSON persistence
+- **ScreenCapturePermissionServiceTests**: Permission checking
+
+<Tip>
+Tests use `/tmp` for scratch builds to avoid conflicts with development builds.
+</Tip>
+
+## Type Checking
+
+Verify Swift code compiles without building:
+
+```bash
+npm run typecheck
+# or directly:
+bash scripts/typecheck-native.sh
+```
+
+## Cleaning Build Artifacts
+
+Remove all generated files:
+
+```bash
+npm run clean
+# or directly:
+bash scripts/clean-generated.sh
+```
+
+This removes:
+- `bin/` directory
+- SwiftPM build caches
+- Module caches
+
+## Release Process
+
+Text Shot includes a comprehensive release script that handles versioning, building, notarization, and DMG creation.
+
+### Creating a Release
+
+<Tabs>
+  <Tab title="Auto-increment Version">
+    ```bash
+    npm run dist
+    # or:
+    bash scripts/release-native.sh --bump-minor
+    ```
+    
+    Automatically bumps the minor version (2.9.0 → 2.10.0, or 2.9.0 → 3.0.0 if minor ≥ 9).
+  </Tab>
+  
+  <Tab title="Explicit Version">
+    ```bash
+    bash scripts/release-native.sh --set-version 3.0.0
+    ```
+    
+    Sets a specific version number.
+  </Tab>
+  
+  <Tab title="Skip Notarization">
+    ```bash
+    bash scripts/release-native.sh --skip-notarize
+    ```
+    
+    Useful for local testing without Apple notarization.
+  </Tab>
+</Tabs>
+
+### What the Release Script Does
+
+<Steps>
+  <Step title="Version Management">
+    Updates `package.json` with the new version number using `npm version`.
+  </Step>
+
+  <Step title="Build">
+    Runs `build-settings-app.sh` to create a signed universal binary.
+  </Step>
+
+  <Step title="Notarization (Optional)">
+    If Apple credentials are provided, submits the app to Apple's notary service:
+    
+    ```bash
+    export APPLE_ID="your-apple-id@example.com"
+    export APPLE_TEAM_ID="YOUR_TEAM_ID"
+    export APPLE_APP_SPECIFIC_PASSWORD="xxxx-xxxx-xxxx-xxxx"
+    ```
+    
+    Then staples the notarization ticket to the app.
+  </Step>
+
+  <Step title="DMG Creation">
+    Creates a distributable DMG with:
+    - The signed app bundle
+    - A symbolic link to `/Applications` for easy installation
+    - Volume name: "Text Shot Installer"
+    
+    Output: `release/Text Shot-2.9.0.dmg`
+  </Step>
+
+  <Step title="Checksum">
+    Generates SHA-256 checksum:
+    ```bash
+    shasum -a 256 release/Text Shot-2.9.0.dmg > release/Text Shot-2.9.0.dmg.sha256
+    ```
+  </Step>
+</Steps>
+
+<Note>
+Release artifacts are placed in the `release/` directory.
+</Note>
+
+## Development Workflow
+
+For rapid iteration during development:
+
+```bash
+npm run dev
+```
+
+This runs `build` followed by `start`, rebuilding and launching the app in one command.
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Swift build fails with module cache errors">
+    Clean module caches:
+    ```bash
+    npm run clean
+    rm -rf ~/.swiftpm
+    npm run build
+    ```
+  </Accordion>
+
+  <Accordion title="Code signing verification fails">
+    Check your signing identity:
+    ```bash
+    security find-identity -v -p codesigning
+    ```
+    
+    For development, the script uses ad-hoc signing by default.
+  </Accordion>
+
+  <Accordion title="App crashes on launch">
+    Check Console.app for crash logs. Common issues:
+    - Missing Screen Recording permission
+    - Invalid code signature
+    - Incompatible macOS version (requires 13.0+)
+  </Accordion>
+
+  <Accordion title="Tests fail to run">
+    Ensure Xcode Command Line Tools are properly installed:
+    ```bash
+    xcode-select -p
+    sudo xcode-select --switch /Library/Developer/CommandLineTools
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Architecture" icon="sitemap" href="/developers/architecture">
+    Understand Text Shot's internal structure
+  </Card>
+  <Card title="Contributing" icon="code-pull-request" href="/developers/contributing">
+    Learn how to contribute to the project
+  </Card>
+</CardGroup>

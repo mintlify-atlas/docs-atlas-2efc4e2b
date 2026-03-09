@@ -1,0 +1,401 @@
+---
+title: Security & Privacy
+description: Privacy guarantees, permissions, and security practices for Text Shot
+---
+
+## Privacy Guarantees
+
+<Warning>
+  **Text Shot is a fully local, privacy-first application. Your data never leaves your Mac.**
+</Warning>
+
+### Core Privacy Principles
+
+Text Shot is designed from the ground up with privacy as the highest priority:
+
+- **No network access** during normal operation
+- **No cloud processing** - all OCR happens on your device
+- **No telemetry** or analytics
+- **No user accounts** or authentication
+- **No data collection** of any kind
+- **Open source** - verify these claims yourself
+
+### What Data Is Processed
+
+<Accordion title="Screen Captures">
+  **Temporary only. Immediately deleted after OCR.**
+
+  #### How It Works
+  1. You trigger the capture hotkey
+  2. You select a screen region with the crosshair
+  3. macOS saves the capture to a **temporary file**: `/var/folders/.../TextShot-<UUID>.png`
+  4. Text Shot reads the file and performs OCR using Vision framework
+  5. The file is **immediately deleted** - typically within 100-500ms
+
+  #### Storage Location
+  Temporary captures use `CaptureTempStore.shared.makeCaptureFileURL()` which creates files in the system temp directory (`NSTemporaryDirectory()`). These files are:
+  - Never persisted to permanent storage
+  - Deleted in the same function call that created them
+  - Cleared by macOS on reboot even if deletion fails
+
+  See `CaptureService.swift:24` and `AppController.swift:199-201` for implementation.
+
+  #### Security Note
+  <Info>
+    Captured images exist only in memory and temporary storage for less than 1 second. They are never sent over the network or saved permanently.
+  </Info>
+</Accordion>
+
+<Accordion title="OCR Results (Extracted Text)">
+  **Copied to clipboard only. Not stored anywhere.**
+
+  #### What Happens to Extracted Text
+  1. Vision framework extracts text from the captured image
+  2. Text is cleaned up (removing noise artifacts)
+  3. Text is written to the **system clipboard** using `NSPasteboard.general`
+  4. The text is **not saved to disk** anywhere by Text Shot
+
+  #### Clipboard Behavior
+  The system clipboard is managed by macOS, not Text Shot:
+  - Other apps can read the clipboard (normal macOS behavior)
+  - Clipboard history apps (e.g., Paste, CopyClip) will record it if you use them
+  - Text Shot doesn't track or store clipboard history
+
+  See `ClipboardService.swift:9-12` for implementation.
+</Accordion>
+
+<Accordion title="User Settings">
+  **Saved locally. No cloud sync.**
+
+  #### What Settings Are Stored
+  Settings are saved to:
+  ```
+  ~/Library/Application Support/Text Shot/settings-v3.json
+  ```
+
+  Contents:
+  ```json
+  {
+    "schemaVersion": 3,
+    "hotkey": "⇧⌘2",
+    "showConfirmation": true,
+    "launchAtLogin": false,
+    "lastPermissionPromptAt": 0
+  }
+  ```
+
+  #### What This Includes
+  - **hotkey**: Your custom keyboard shortcut
+  - **showConfirmation**: Whether to show toast notifications
+  - **launchAtLogin**: Whether to start Text Shot at system login
+  - **lastPermissionPromptAt**: Timestamp to avoid spamming permission dialogs
+
+  #### Security
+  - Stored as plain JSON (no sensitive data to encrypt)
+  - Only accessible to your user account (Unix file permissions)
+  - Never synced to iCloud or other cloud services
+  - Can be safely deleted - Text Shot will recreate with defaults
+
+  See `SettingsModel.swift:3-19` for the schema.
+</Accordion>
+
+## Permission Requirements
+
+<Info>
+  Text Shot requires only **one permission**: Screen Recording. This is required by macOS to capture screen regions.
+</Info>
+
+### Screen Recording Permission
+
+**Required for**: Capturing user-selected screen regions using the `screencapture` utility.
+
+#### Why This Permission Is Needed
+
+Text Shot uses the macOS command-line tool `/usr/sbin/screencapture` to capture screen regions. As of macOS 10.15 (Catalina), Apple requires **Screen Recording permission** for any app that captures screen content, even with user interaction.
+
+#### What This Permission Allows
+
+<Warning>
+  Screen Recording permission sounds invasive, but Text Shot only captures when you explicitly trigger the hotkey. It never records your screen automatically or in the background.
+</Warning>
+
+**Text Shot can:**
+- Invoke `screencapture -i -x` when you press the hotkey
+- Read the resulting image file to perform OCR
+- Nothing else
+
+**Text Shot cannot:**
+- Record your screen continuously
+- Capture screenshots without your explicit action
+- Access screen content from other apps directly
+- See your screen when the app is idle
+
+#### How to Grant Permission
+
+1. Open **System Settings**
+2. Go to **Privacy & Security** > **Screen Recording**
+3. Find **Text Shot** in the list
+4. Toggle it **ON** (check the checkbox)
+5. **Quit and relaunch** Text Shot
+
+#### Permission Detection
+
+Text Shot checks for Screen Recording permission using:
+- `CGPreflightScreenCaptureAccess()` - Check without prompting
+- `CGRequestScreenCaptureAccess()` - Request if not granted
+
+See `ScreenCapturePermissionService.swift:32-47` for implementation.
+
+#### Fallback Behavior
+
+If permission is denied:
+- The hotkey still triggers
+- `screencapture` fails with a permission error
+- Text Shot shows a toast: "Capture failed"
+- No crash or error - graceful degradation
+
+See `CaptureService.swift:76-86` for error handling.
+
+### No Other Permissions Required
+
+Text Shot **does not** request:
+- **Accessibility**: Not needed (we don't read UI elements or simulate input)
+- **Automation**: Not needed (we don't control other apps)
+- **Contacts, Calendar, Photos**: Not relevant
+- **Microphone, Camera**: Not used
+- **Location Services**: Not used
+- **Full Disk Access**: Not needed (only writes to temp dir and Application Support)
+
+## Data Storage & Retention
+
+<Accordion title="What Is Stored on Disk">
+  ### Permanent Storage
+  - **Settings file**: `~/Library/Application Support/Text Shot/settings-v3.json` (~200 bytes)
+  - **Migration marker**: `~/Library/Application Support/Text Shot/.migration-v3-done` (empty file)
+
+  ### Temporary Storage
+  - **Capture screenshots**: `/var/folders/.../TextShot-<UUID>.png` (deleted within 1 second)
+  - Managed by `CaptureTempStore.shared`
+
+  ### No Other Storage
+  - No logs
+  - No crash reports
+  - No caches
+  - No history
+  - No temporary state beyond the capture workflow
+
+  See `SettingsModel.swift:106-125` for storage initialization.
+</Accordion>
+
+<Accordion title="How to Completely Remove Text Shot">
+  To fully uninstall Text Shot:
+
+  ```bash
+  # 1. Quit the app
+  killall "Text Shot"
+
+  # 2. Remove the app
+  rm -rf /Applications/Text\ Shot.app
+
+  # 3. Remove settings
+  rm -rf ~/Library/Application\ Support/Text\ Shot
+
+  # 4. Remove launch agent (if using Launch at Login)
+  launchctl remove com.textshot.launcher
+  ```
+
+  This removes **all traces** of Text Shot from your Mac.
+
+  #### What About System Permissions?
+  Screen Recording permission entries persist in System Settings even after uninstalling. To remove:
+  1. **System Settings** > **Privacy & Security** > **Screen Recording**
+  2. Select **Text Shot**
+  3. Click the **-** (minus) button
+
+  Or use the command line:
+  ```bash
+  tccutil reset ScreenCapture com.yourorg.textshot
+  ```
+</Accordion>
+
+## Entitlements & Sandboxing
+
+<Info>
+  Text Shot uses minimal entitlements and is **not sandboxed** to allow access to the `screencapture` utility.
+</Info>
+
+### App Entitlements
+
+Text Shot is signed with the following entitlements (`build/entitlements.mac.plist`):
+
+```xml
+<key>com.apple.security.cs.allow-jit</key>
+<true/>
+<key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+<true/>
+<key>com.apple.security.cs.disable-library-validation</key>
+<true/>
+```
+
+#### Why These Entitlements?
+
+- **allow-jit**: Required for Swift runtime on older macOS versions
+- **allow-unsigned-executable-memory**: Required for certain Swift optimizations
+- **disable-library-validation**: Allows loading the KeyboardShortcuts framework
+
+#### Why Not Sandboxed?
+
+**App Sandbox** would prevent Text Shot from:
+- Executing `/usr/sbin/screencapture` (external process)
+- Writing to `NSTemporaryDirectory()` without explicit entitlements
+- Reading arbitrary screen regions
+
+Sandboxing would require significant architectural changes and provide limited security benefit for this use case.
+
+### Code Signing
+
+Text Shot binaries distributed via GitHub Releases are:
+- **Code signed** with a Developer ID certificate
+- **Notarized** by Apple
+- Verified by Gatekeeper on first launch
+
+Build from source:
+- Uses ad-hoc signing (self-signed)
+- Requires manual Gatekeeper exception (right-click > Open)
+
+## Third-Party Dependencies
+
+<Accordion title="KeyboardShortcuts (MIT License)">
+  **Source**: [github.com/sindresorhus/KeyboardShortcuts](https://github.com/sindresorhus/KeyboardShortcuts)
+
+  **License**: MIT
+
+  **Purpose**: Provides the UI and system integration for customizable global hotkeys.
+
+  ### Security Review
+  KeyboardShortcuts is a widely-used, well-maintained library by Sindre Sorhus (trusted macOS developer). It:
+  - Uses public Apple APIs (`Carbon.HIToolbox`)
+  - Does not make network requests
+  - Does not access sensitive data
+  - Is open source and auditable
+
+  ### License Details
+  Full license text is available in `ThirdPartyNotices.txt:10-30`.
+</Accordion>
+
+<Accordion title="Apple Vision Framework">
+  **Source**: Built into macOS (first-party Apple framework)
+
+  **Purpose**: OCR text recognition from images.
+
+  ### Security
+  - Fully on-device processing (no cloud API)
+  - Optimized by Apple for privacy and performance
+  - No network access
+  - No data collection
+
+  ### API Used
+  - `VNRecognizeTextRequest` - Main OCR API
+  - `VNImageRequestHandler` - Image processing
+
+  See `OCRService.swift:65-80` for implementation.
+</Accordion>
+
+## Reporting Security Issues
+
+<Warning>
+  **Found a security vulnerability? Please report it responsibly.**
+</Warning>
+
+### How to Report
+
+**Preferred method:**
+- Use **GitHub Security Advisories** for this repository
+- This allows private disclosure before a fix is available
+
+**Alternative method:**
+- Open a GitHub issue with **minimal, non-sensitive details**
+- Request a private contact channel in the issue
+
+### What to Include
+
+1. **Affected version**: Which version of Text Shot?
+2. **macOS version**: Which OS version?
+3. **Steps to reproduce**: How can the issue be triggered?
+4. **Expected vs actual behavior**: What should happen vs what actually happens?
+5. **Security impact**: What's the potential harm?
+
+### Disclosure Policy
+
+<Info>
+  Please **do not publicly disclose vulnerabilities** until a fix or mitigation is available. We will work with you to address the issue and credit you in the release notes if desired.
+</Info>
+
+From `SECURITY.md:22-24`:
+> Please do not publicly disclose vulnerabilities until a fix or mitigation is available.
+
+## Open Source Transparency
+
+<Accordion title="Why Open Source Matters for Privacy">
+  Text Shot is **open source (MIT License)** specifically to enable independent security and privacy audits.
+
+  ### Verify These Claims
+  You can review the entire source code on GitHub and confirm:
+  - No network calls (search for `URLSession`, `URL`, `HTTP` - none exist)
+  - No analytics SDKs (search for common analytics libraries - none bundled)
+  - No telemetry (no usage tracking code anywhere)
+  - Temporary files are immediately deleted (`defer` blocks in `AppController.swift:199-201`)
+  - Settings stored locally only (`SettingsModel.swift:44-74`)
+
+  ### Build It Yourself
+  Don't trust the distributed binary? Build from source:
+  ```bash
+  git clone <repo-url>
+  cd text-shot
+  npm install
+  npm run build
+  ```
+
+  See `README.md:32-48` for build instructions.
+
+  ### Reproducible Builds
+  The build process is deterministic and documented. You can verify that the distributed binary matches the source code.
+</Accordion>
+
+<Accordion title="Agent-Assisted Development Disclosure">
+  Text Shot was built using **agent-assisted software development** with GPT-5.3-Codex.
+
+  From `README.md:59-61`:
+  > Text Shot was built while exploring agent-assisted software development, with a GPT-5.3-Codex model. The application logic and implementation were generated through iterative prompting and system-level direction by the author, then tested in real-world usage and reviewed at a system level before release.
+
+  ### What This Means for Security
+  - The author reviewed all generated code
+  - Security and privacy were explicit requirements during development
+  - The code was tested in real-world usage before release
+  - The author assumes full responsibility for the distributed software
+
+  ### Transparency
+  This disclosure is provided for transparency. The code quality and security practices are the same as any manually-written software - subject to review, testing, and validation.
+</Accordion>
+
+## Privacy Summary
+
+<Note>
+  **TL;DR**: Text Shot is a fully local, privacy-first utility that:
+
+  - Processes everything on your Mac using Apple Vision framework
+  - Never sends data over the network
+  - Stores only your preferences (hotkey, settings)
+  - Deletes captured images immediately after OCR
+  - Requires only Screen Recording permission (for `screencapture` utility)
+  - Is open source - you can verify all of this yourself
+
+  **Your data never leaves your Mac.**
+</Note>
+
+## Additional Resources
+
+- [Troubleshooting Guide](/reference/troubleshooting) - Common issues and solutions
+- [FAQ](/reference/faq) - Frequently asked questions
+- [GitHub Repository](https://github.com) - Full source code
+- [SECURITY.md](https://github.com) - Security policy and reporting

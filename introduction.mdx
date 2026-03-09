@@ -1,0 +1,178 @@
+---
+title: Introduction
+description: A lightweight macOS screenshot-to-text utility with on-device OCR
+---
+
+## What is Text Shot?
+
+Text Shot is a lightweight macOS screenshot-to-text utility that lets you capture any screen region and instantly extract text using on-device OCR. It runs entirely on-device and is built for speed, simplicity, and keyboard-driven workflows.
+
+<CardGroup cols={2}>
+  <Card title="Fully Local" icon="lock">
+    All OCR processing happens on your Mac. No data collection, no network calls, no accounts required.
+  </Card>
+  <Card title="Blazing Fast" icon="bolt">
+    Capture-to-clipboard workflow takes seconds. Lightweight at ~2 MB with native macOS performance.
+  </Card>
+  <Card title="Keyboard-First" icon="keyboard">
+    Trigger captures with a global hotkey. Never touch your mouse to extract text from the screen.
+  </Card>
+  <Card title="Privacy Focused" icon="shield">
+    Zero runtime network access. Your screenshots and extracted text never leave your device.
+  </Card>
+</CardGroup>
+
+## How It Works
+
+The workflow is simple:
+
+1. **Trigger**: Press your keyboard shortcut (default: `⇧⌘2`)
+2. **Select**: Click and drag to select the screen region containing text
+3. **Extract**: Text Shot performs OCR on the selected region
+4. **Paste**: The extracted text is automatically copied to your clipboard
+
+The entire process takes just seconds, with no manual file saving or uploading required.
+
+## Key Features
+
+<Note>
+  Text Shot uses Apple's Vision framework for OCR, providing high-accuracy text recognition with support for multiple languages and automatic language correction.
+</Note>
+
+- **Fully local OCR processing** - Text extraction happens entirely on your Mac using Apple's Vision framework
+- **Lightweight (~2 MB)** - Minimal disk footprint with no bundled ML models
+- **Native macOS experience** - Built with Swift and AppKit for optimal performance
+- **No login or accounts** - Install and start using immediately
+- **No runtime network access** - Complete privacy for your captures
+- **Fast capture-to-text workflow** - From hotkey press to clipboard in seconds
+- **Customizable hotkey** - Set any keyboard shortcut that fits your workflow
+- **Launch at login** - Optional auto-start when you boot your Mac
+- **Visual confirmation** - Optional toast notification when text is copied
+
+## Who Should Use Text Shot?
+
+<CardGroup cols={3}>
+  <Card title="Keyboard-First Users" icon="terminal">
+    If you prefer keyboard shortcuts over mouse-heavy workflows, Text Shot fits naturally into your daily routine.
+  </Card>
+  <Card title="Content Creators" icon="pen">
+    Extract text from videos, screenshots, PDFs, or any on-screen content without manual retyping.
+  </Card>
+  <Card title="Privacy-Conscious Users" icon="user-shield">
+    Keep your data local. No cloud uploads, no third-party services, no data collection.
+  </Card>
+</CardGroup>
+
+Text Shot is ideal for anyone who frequently needs to extract text from:
+
+- Video tutorials or presentations
+- PDF documents or scanned images
+- Error messages or dialog boxes
+- Social media posts or images
+- Any non-selectable on-screen text
+
+## System Requirements
+
+<Warning>
+  Text Shot requires **macOS 13 (Ventura)** or later to run. Ensure your system is up to date before installation.
+</Warning>
+
+**Required:**
+- macOS 13.0 (Ventura) or later
+- Screen Recording permission (granted during first launch)
+
+**Optional:**
+- Accessibility permission (for advanced hotkey features on some macOS versions)
+
+**Supported architectures:**
+- Apple Silicon (M1, M2, M3, etc.)
+- Intel Macs
+
+## Technical Architecture
+
+Text Shot is built as a native Swift menu bar application with the following components:
+
+```swift
+// Core capture flow from AppController.swift
+func runCaptureFlow() async {
+    // 1. Check Screen Recording permission
+    guard hasScreenCaptureAccess else { return }
+    
+    // 2. Capture selected region using screencapture
+    let capture = await captureService.captureRegion()
+    guard let imagePath = capture.path else { return }
+    
+    // 3. Run OCR with automatic fallback
+    let text = try ocrService.runOcrWithRetry(imagePath: imagePath)
+    
+    // 4. Copy to clipboard
+    clipboardService.write(text)
+    
+    // 5. Show confirmation (if enabled)
+    showToastIfEnabled("Copied!")
+}
+```
+
+**Key components:**
+
+- **CaptureService** - Uses macOS `screencapture` utility for region selection
+- **OCRService** - Apple Vision framework with automatic quality fallback
+- **HotkeyManager** - Global hotkey registration using KeyboardShortcuts library
+- **ClipboardService** - NSPasteboard integration for clipboard access
+- **ToastPresenter** - Visual confirmation overlay with native blur effects
+
+### OCR Strategy
+
+Text Shot employs a multi-level OCR strategy to maximize text recognition accuracy:
+
+```swift
+// From OCRService.swift
+private let retryChain: [(RecognitionLevel, Bool)] = [
+    (.accurate, true),   // Try accurate mode with language correction
+    (.accurate, false),  // Try accurate mode without correction
+    (.fast, true)        // Fall back to fast mode if needed
+]
+```
+
+This ensures high-quality results even with challenging input like low-resolution screenshots or stylized fonts.
+
+## Privacy & Security
+
+<Note>
+  Text Shot requires Screen Recording permission to capture selected regions. This is a standard macOS permission required by all screenshot utilities.
+</Note>
+
+Text Shot is designed with privacy as a core principle:
+
+- **No network access** - The app never makes network requests during normal operation
+- **No data collection** - Your captures and extracted text stay on your device
+- **No analytics** - Zero telemetry, tracking, or usage statistics
+- **No accounts** - Install and use immediately without creating an account
+- **Local processing only** - All OCR happens on-device using Apple's Vision framework
+
+The only permission required is **Screen Recording**, which is necessary to capture the screen region you select. macOS will prompt you to grant this permission on first launch.
+
+## Getting Started
+
+Ready to start extracting text?
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Download and install Text Shot on your Mac
+  </Card>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Complete your first capture in under 60 seconds
+  </Card>
+</CardGroup>
+
+## Open Source
+
+Text Shot is open source and available on GitHub under the MIT license. The project bundles the [KeyboardShortcuts](https://github.com/sindresorhus/KeyboardShortcuts) library for hotkey management.
+
+## Development Story
+
+<Note>
+  Text Shot was built as an exploration of agent-assisted software development using GPT-5.3-Codex, while maintaining the principle that strong engineering judgment and validation remain essential.
+</Note>
+
+Text Shot began as a tool to eliminate repeated manual text extraction in daily workflows while evaluating modern coding agents and frontier development tooling. The project reflects a practical exploration of agent-assisted software development alongside an understanding that proper testing, code review, and quality assurance are non-negotiable.

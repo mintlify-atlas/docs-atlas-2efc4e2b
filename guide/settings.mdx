@@ -1,0 +1,511 @@
+---
+title: Settings
+description: Configure Text Shot's behavior, hotkeys, and preferences
+---
+
+Text Shot provides a clean, focused settings interface to customize your capture experience. All settings are stored locally and persist across app launches.
+
+<Info>
+Access Settings by clicking the Text Shot menu bar icon (if visible) and selecting "Settings", or launch the app from Applications.
+</Info>
+
+## Settings Overview
+
+Text Shot stores four key settings:
+
+<ParamField path="hotkey" type="string" default="⇧⌘2">
+  The global keyboard shortcut that triggers screen capture. Displayed as Unicode symbols (⌘, ⇧, ⌥, ⌃).
+</ParamField>
+
+<ParamField path="showConfirmation" type="boolean" default="true">
+  Whether to show toast notifications after capture operations. When enabled, displays messages like "Copied!", "No text", etc.
+</ParamField>
+
+<ParamField path="launchAtLogin" type="boolean" default="false">
+  Whether Text Shot should automatically start when you log in to macOS. When enabled, app runs silently in background with hotkey active.
+</ParamField>
+
+<ParamField path="lastPermissionPromptAt" type="integer" default="0">
+  Internal timestamp tracking when Screen Recording permission was last requested. Used to prevent spam prompts. Not user-visible.
+</ParamField>
+
+## Hotkey Customization
+
+### Default Hotkey
+
+Text Shot ships with a sensible default:
+
+```swift
+static let defaultShortcut = AppHotkeyShortcut(.two, modifiers: [.shift, .command])
+// Displays as: ⇧⌘2
+```
+
+This mirrors macOS's native screenshot shortcuts:
+- `⌘⇧3` - Full screen capture
+- `⌘⇧4` - Region selection (system screenshot)
+- `⌘⇧5` - Screenshot controls
+- **`⌘⇧2` - Text Shot capture** (follows the pattern)
+
+<Tip>
+The default is designed to be memorable and consistent with macOS conventions.
+</Tip>
+
+### Customizing Your Hotkey
+
+To change your capture hotkey:
+
+<Steps>
+  <Step title="Open Settings">
+    Launch Text Shot and open the Settings window.
+  </Step>
+  
+  <Step title="Click the hotkey field">
+    The keyboard shortcut recorder is labeled "Hotkey" or "Capture Shortcut".
+  </Step>
+  
+  <Step title="Press your desired key combination">
+    Press the modifiers + key you want to use. The field updates immediately.
+  </Step>
+  
+  <Step title="Validation happens automatically">
+    Text Shot validates your shortcut and applies it if valid.
+  </Step>
+</Steps>
+
+<Note>
+If you press an invalid combination, Text Shot restores your previous hotkey and shows an error message.
+</Note>
+
+### Hotkey Requirements
+
+Text Shot enforces specific rules for hotkeys:
+
+#### Modifier Key Requirement
+
+Most shortcuts **must include at least one modifier**:
+
+- ⌘ Command
+- ⌥ Option
+- ⌃ Control
+- ⇧ Shift
+
+```swift
+static func validateNoModifierRule(_ shortcut: AppHotkeyShortcut?) throws {
+    guard isAllowedNoModifierShortcut(shortcut) || hasAnyModifier(shortcut) else {
+        throw HotkeyApplyError.invalidShortcut
+    }
+}
+```
+
+<Warning>
+Shortcuts without modifiers (like just pressing "A") are rejected with error: "Unsupported shortcut. Use one or more modifiers, or an F-key."
+</Warning>
+
+#### Exception: Function Keys
+
+Function keys (F1-F20) can be used **without modifiers**:
+
+```swift
+static func isFunctionKey(_ shortcut: AppHotkeyShortcut) -> Bool {
+    let fKeyRawValues: Set<Int> = [
+        Int(kVK_F1), Int(kVK_F2), Int(kVK_F3), /* ... */ Int(kVK_F20)
+    ]
+    return fKeyRawValues.contains(shortcut.carbonKeyCode)
+}
+```
+
+Valid function key shortcuts:
+- `F1`, `F2`, ... `F20` (alone)
+- `⌘F1`, `⌥⌘F5`, etc. (with modifiers)
+
+<Tip>
+Function keys are great if you have a keyboard with dedicated F-keys and they're not mapped to system functions.
+</Tip>
+
+### macOS 15 Option Key Warning
+
+Text Shot warns about Option-only shortcuts on macOS 15+:
+
+```swift
+static func macOS15OptionGuardrailMessage(for shortcut: AppHotkeyShortcut?) -> String? {
+    let modifiers = shortcut.modifiers.intersection([.command, .option, .control, .shift])
+    guard modifiers.contains(.option) else {
+        return nil
+    }
+    
+    let hasCommandOrControl = modifiers.contains(.command) || modifiers.contains(.control)
+    guard !hasCommandOrControl else {
+        return nil
+    }
+    
+    return "Option-only shortcuts may not fire reliably on macOS 15. Prefer adding Command or Control."
+}
+```
+
+Shortcuts like `⌥⇧2` or `⌥A` trigger this warning (but are still allowed).
+
+<Info>
+This is a guardrail, not a blocker. macOS 15 has issues with Option-only global shortcuts in some configurations.
+</Info>
+
+### Recommended Hotkey Patterns
+
+<CardGroup cols={2}>
+  <Card title="Command + Shift + Key" icon="keyboard">
+    `⌘⇧2`, `⌘⇧T`, `⌘⇧X`
+    
+    Standard macOS pattern. Easy to remember and unlikely to conflict.
+  </Card>
+  
+  <Card title="Control + Shift + Key" icon="keyboard">
+    `⌃⇧2`, `⌃⇧T`, `⌃⇧X`
+    
+    Good alternative if Command+Shift combos are taken by other apps.
+  </Card>
+  
+  <Card title="Command + Option + Key" icon="keyboard">
+    `⌘⌥2`, `⌘⌥T`, `⌘⌥X`
+    
+    Strong combo, less common in default app shortcuts.
+  </Card>
+  
+  <Card title="Function Keys" icon="keyboard">
+    `F13`, `F14`, `F15`
+    
+    Often unused on full keyboards. No conflicts with typing.
+  </Card>
+</CardGroup>
+
+### Handling Conflicts
+
+If your chosen hotkey conflicts with another app:
+
+1. **Text Shot registers first** - If Text Shot is already running, it owns the hotkey
+2. **Other app registers first** - The other app owns it, Text Shot's hotkey won't fire
+3. **System shortcuts win** - macOS system shortcuts always take precedence
+
+<Tip>
+If your hotkey isn't working, try a different combination or check for conflicts in System Settings → Keyboard → Keyboard Shortcuts.
+</Tip>
+
+## Show Confirmation Toast
+
+### What Confirmation Toasts Do
+
+When enabled (default), Text Shot displays a brief HUD notification after each capture:
+
+| Message | Meaning |
+|---------|----------|
+| "Copied!" | Text successfully extracted and copied to clipboard |
+| "No text" | OCR completed but found no recognizable text |
+| "Capture failed" | Screenshot capture failed (usually permission issue) |
+| "Error" | OCR processing encountered an error |
+
+### Toast Behavior
+
+```swift
+private func showToastIfEnabled(_ message: String) {
+    if currentSettings.showConfirmation {
+        toastPresenter.show(message)
+    }
+}
+```
+
+From `AppController.swift:158-162`, toasts are only shown when `showConfirmation` is `true`.
+
+### When to Disable Toasts
+
+Consider disabling confirmation toasts if:
+
+- You prefer silent operation
+- You're using Text Shot in automation/scripting
+- Toast notifications distract from your workflow
+- You'll know success from being able to paste the text
+
+<Note>
+Even with toasts disabled, text is still copied to your clipboard when OCR succeeds. You just won't see visual confirmation.
+</Note>
+
+### Toast Implementation Details
+
+Toasts are implemented in `ToastPresenter.swift` with these characteristics:
+
+- **Position**: Center of screen containing mouse cursor
+- **Duration**: 2 seconds total (0.14s fade in + 2s hold + 0.22s fade out)
+- **Style**: HUD window with blur/vibrancy effect
+- **Level**: Above normal windows, ignores mouse events
+- **Multi-display aware**: Appears on the correct display automatically
+
+## Launch at Login
+
+### Enabling Launch at Login
+
+When enabled, Text Shot:
+
+1. Starts automatically when you log in to macOS
+2. Runs silently in the background (no windows)
+3. Makes the global hotkey immediately available
+4. Uses minimal resources (~30-50 MB RAM)
+
+```swift
+private func installStartupState() {
+    launchAtLoginService.apply(enabled: currentSettings.launchAtLogin)
+    // ...
+}
+```
+
+### How It Works
+
+Text Shot uses macOS's Service Management framework:
+
+```swift
+// LaunchAtLoginService.swift
+final class LaunchAtLoginService {
+    func apply(enabled: Bool) {
+        // Registers with macOS Launch Services
+        // No deprecated Login Items API
+    }
+}
+```
+
+<Info>
+This is the modern, recommended approach for launch-at-login functionality on macOS 13+.
+</Info>
+
+### When to Enable
+
+Enable Launch at Login if:
+
+- You use Text Shot frequently throughout the day
+- You want the hotkey always available without manual launching
+- You prefer "set it and forget it" tools
+
+<Tip>
+Text Shot is lightweight enough that leaving it running 24/7 has negligible impact on system performance.
+</Tip>
+
+### Disabling Launch at Login
+
+To disable:
+
+1. Open Text Shot Settings
+2. Uncheck "Launch at Login"
+3. Settings save automatically
+
+On your next login, Text Shot won't start automatically.
+
+## Settings Storage
+
+### File Location
+
+Settings are stored as JSON in Application Support:
+
+```
+~/Library/Application Support/Text Shot/settings-v3.json
+```
+
+<Accordion title="Example settings file">
+```json
+{
+  "hotkey" : "⇧⌘2",
+  "launchAtLogin" : false,
+  "lastPermissionPromptAt" : 0,
+  "schemaVersion" : 3,
+  "showConfirmation" : true
+}
+```
+
+The file is human-readable with pretty printing and sorted keys.
+</Accordion>
+
+### Storage Implementation
+
+```swift
+final class SettingsStoreV2 {
+    private let fileURL: URL  // ~/Library/Application Support/Text Shot/settings-v3.json
+    
+    func save(_ settings: AppSettingsV2) throws -> AppSettingsV2 {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let data = try encoder.encode(settings)
+        try data.write(to: fileURL, options: .atomic)
+        return settings
+    }
+}
+```
+
+From `SettingsModel.swift:64-74`, settings are saved atomically to prevent corruption.
+
+<Note>
+Atomic writes ensure that if Text Shot crashes during save, your settings file won't be corrupted - it's either fully written or unchanged.
+</Note>
+
+## Settings Persistence
+
+### Automatic Saving
+
+Settings are saved automatically when you change them:
+
+```swift
+private func saveSettings(_ editable: EditableSettings) -> Result<EditableSettings, SettingsActionError> {
+    var next = currentSettings
+    next.apply(editable)  // Update settings
+    
+    do {
+        currentSettings = try settingsStore.save(next)  // Save immediately
+        launchAtLoginService.apply(enabled: currentSettings.launchAtLogin)
+        return .success(currentSettings.editable)
+    } catch {
+        return .failure(.message("Failed to save settings"))
+    }
+}
+```
+
+From `AppController.swift:145-156`, there's no manual "Save" button - changes persist immediately.
+
+### Settings Validation
+
+Settings are validated and normalized on load:
+
+```swift
+private func normalized(_ settings: AppSettingsV2) -> AppSettingsV2 {
+    var copy = settings
+    copy.schemaVersion = AppSettingsV2.schemaVersionValue
+    if copy.hotkey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        copy.hotkey = AppSettingsV2.defaults.hotkey  // Reset to ⇧⌘2
+    }
+    return copy
+}
+```
+
+Invalid or empty settings are replaced with defaults.
+
+## Settings Migration
+
+### Automatic Migration
+
+Text Shot automatically migrates settings from older versions:
+
+```swift
+func prepareStore() throws -> SettingsStoreV2 {
+    // Checks for settings-v2.json, settings.json, etc.
+    if !fm.fileExists(atPath: targetURL.path) {
+        let migrated = migrateSettingsIfAvailable(settingsDirectory: settingsDirectory) ?? .defaults
+        let store = SettingsStoreV2(fileURL: targetURL, fileManager: fm)
+        _ = try store.save(migrated)
+    }
+    return SettingsStoreV2(fileURL: targetURL, fileManager: fm)
+}
+```
+
+### Migration Candidates
+
+SettingsMigrator checks these locations in order:
+
+1. `~/Library/Application Support/Text Shot/settings-v3.json` (current)
+2. `~/Library/Application Support/Text Shot/settings-v2.json` (previous)
+3. `~/Library/Application Support/Text Shot/settings.json` (original)
+4. `~/Library/Application Support/text-shot/settings.json` (legacy path)
+
+<Info>
+Migration happens once on first launch after upgrade. A marker file (`.migration-v3-done`) prevents re-migration.
+</Info>
+
+### What Gets Migrated
+
+From `SettingsModel.swift:138-156`:
+
+- **hotkey** - Keyboard shortcut preference
+- **showConfirmation** - Toast notification toggle
+- **launchAtLogin** - Auto-launch preference
+- **lastPermissionPromptAt** - Permission tracking
+
+<Note>
+If migration finds no previous settings, Text Shot uses built-in defaults instead.
+</Note>
+
+## Settings Defaults
+
+### Default Values
+
+```swift
+static let defaults = AppSettingsV2(
+    schemaVersion: 3,
+    hotkey: "⇧⌘2",
+    showConfirmation: true,
+    launchAtLogin: false,
+    lastPermissionPromptAt: 0
+)
+```
+
+These defaults are used:
+
+- On first launch (no settings file exists)
+- After failed migration
+- When individual settings are invalid
+
+<CardGroup cols={2}>
+  <Card title="hotkey" icon="keyboard">
+    **⇧⌘2** (Command + Shift + 2)
+    
+    Mirrors macOS screenshot shortcuts
+  </Card>
+  
+  <Card title="showConfirmation" icon="bell">
+    **true**
+    
+    Toast notifications enabled by default
+  </Card>
+  
+  <Card title="launchAtLogin" icon="power-off">
+    **false**
+    
+    Opt-in feature, disabled by default
+  </Card>
+  
+  <Card title="lastPermissionPromptAt" icon="clock">
+    **0** (never)
+    
+    Internal tracking field
+  </Card>
+</CardGroup>
+
+## Resetting Settings
+
+To reset all settings to defaults:
+
+<Steps>
+  <Step title="Quit Text Shot">
+    Fully quit the application (⌘Q or Quit from menu).
+  </Step>
+  
+  <Step title="Delete settings file">
+    ```bash
+    rm ~/Library/Application\ Support/Text\ Shot/settings-v3.json
+    ```
+  </Step>
+  
+  <Step title="Relaunch Text Shot">
+    When launched, Text Shot will create a new settings file with defaults.
+  </Step>
+</Steps>
+
+<Warning>
+This deletes all your preferences. Your hotkey will reset to `⌘⇧2` and Launch at Login will be disabled.
+</Warning>
+
+## Advanced: Direct Settings Editing
+
+You can manually edit the settings file if needed:
+
+1. Quit Text Shot
+2. Open the file:
+   ```bash
+   open ~/Library/Application\ Support/Text\ Shot/settings-v3.json
+   ```
+3. Edit the JSON (ensure valid syntax)
+4. Save and relaunch Text Shot
+
+<Tip>
+Use a JSON validator if you manually edit - invalid JSON will cause Text Shot to fall back to defaults.
+</Tip>

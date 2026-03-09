@@ -1,0 +1,340 @@
+---
+title: Permissions
+description: Understanding and managing Screen Recording permission for Text Shot
+---
+
+Text Shot requires **Screen Recording** permission to capture screenshots from your screen. This page explains why this permission is needed, how to grant it, and how to troubleshoot permission issues.
+
+<Warning>
+Without Screen Recording permission, Text Shot cannot capture screenshots and will not function.
+</Warning>
+
+## Why Screen Recording Permission?
+
+Text Shot uses macOS's built-in `screencapture` utility to capture screen regions:
+
+```swift
+let process = Process()
+process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+process.arguments = ["-i", "-x", outputPath]
+```
+
+Starting in macOS 10.15 (Catalina), Apple requires apps to have Screen Recording permission to use `screencapture` and similar tools.
+
+<Info>
+This permission is enforced by macOS's TCC (Transparency, Consent, and Control) system for user privacy.
+</Info>
+
+### What This Permission Allows
+
+When you grant Screen Recording permission to Text Shot:
+
+- ✅ Text Shot can invoke the system screenshot tool
+- ✅ You can capture any region of your screen
+- ✅ The captured image can be processed by OCR
+
+<Note>
+Text Shot **cannot** record video or continuously monitor your screen. The permission only allows taking screenshots when you explicitly trigger a capture.
+</Note>
+
+### What Text Shot Does NOT Do
+
+Despite the "Screen Recording" permission name:
+
+- ❌ No video recording
+- ❌ No continuous screen monitoring  
+- ❌ No automatic screenshots
+- ❌ No screen streaming
+- ❌ Screenshots are immediately deleted after OCR
+
+<Tip>
+The permission name is misleading - Text Shot only captures still screenshots when you press your hotkey.
+</Tip>
+
+## Granting Permission
+
+### First Launch Flow
+
+When you first trigger a capture, Text Shot requests Screen Recording permission:
+
+<Steps>
+  <Step title="Trigger first capture">
+    Press your hotkey (`⌘⇧2` by default) for the first time.
+  </Step>
+  
+  <Step title="macOS shows permission dialog">
+    A system dialog appears asking to grant Screen Recording permission.
+    
+    <Info>
+    This dialog is shown by macOS, not Text Shot. It's a system security feature.
+    </Info>
+  </Step>
+  
+  <Step title="Click 'Open System Settings'">
+    Click the button to open System Settings → Privacy & Security → Screen Recording.
+  </Step>
+  
+  <Step title="Enable Text Shot">
+    Find "Text Shot" or "TextShotSettings" in the list and toggle it on.
+  </Step>
+  
+  <Step title="Restart Text Shot">
+    Quit and restart Text Shot for the permission to take effect.
+  </Step>
+</Steps>
+
+<Warning>
+macOS requires an app restart after granting Screen Recording permission. The permission won't work until you restart Text Shot.
+</Warning>
+
+### Manual Permission Grant
+
+You can also grant permission manually before first use:
+
+1. Open **System Settings**
+2. Navigate to **Privacy & Security**
+3. Click **Screen Recording**
+4. Click the **+** button (you may need to unlock with your password)
+5. Browse to and select **Text Shot.app**
+6. Launch Text Shot
+
+## Permission Implementation
+
+### Preflight Check
+
+Text Shot checks permission status before each capture:
+
+```swift
+func preflightAuthorized() -> Bool {
+    CGPreflightScreenCaptureAccess()
+}
+```
+
+This function from `ScreenCapturePermissionService.swift:32-34` checks if permission is already granted without showing a prompt.
+
+### Request Logic
+
+If permission is not granted, Text Shot requests it:
+
+```swift
+func requestIfNeededOncePerLaunch() -> Bool {
+    if authorizationAPI.preflight() {
+        return true  // Already authorized
+    }
+    
+    guard !didRequestThisLaunch else {
+        return false  // Don't spam user with requests
+    }
+    
+    didRequestThisLaunch = true
+    return authorizationAPI.request()  // Show system dialog
+}
+```
+
+From `ScreenCapturePermissionService.swift:36-47`, this ensures:
+
+- Permission is only requested when needed
+- The prompt is shown at most once per app launch
+- User isn't repeatedly bothered if they deny permission
+
+<Accordion title="Why only once per launch?">
+If Text Shot requested permission on every capture attempt, users who haven't granted permission would see a system dialog every time they press the hotkey. 
+
+By limiting to once per launch, users who choose not to grant permission (or need to restart after granting) aren't bombarded with prompts.
+</Accordion>
+
+## Checking Permission Status
+
+### From System Settings
+
+To verify Text Shot's permission status:
+
+1. Open **System Settings**
+2. Go to **Privacy & Security**
+3. Select **Screen Recording**
+4. Look for **Text Shot** or **TextShotSettings** in the list
+5. Check if the toggle is **on** (blue)
+
+<Info>
+The app might appear as "TextShotSettings" in the permission list - this is the technical bundle name.
+</Info>
+
+### From Text Shot Behavior
+
+You can tell if permission is granted by Text Shot's behavior:
+
+| Behavior | Permission Status |
+|----------|-------------------|
+| Capture works normally, toast shows "Copied!" | ✅ Permission granted |
+| Toast shows "Capture failed" | ❌ Permission denied or not granted |
+| System dialog appears asking for permission | ⚠️ Permission not yet granted |
+
+## Troubleshooting Permission Issues
+
+### Capture Fails with "Capture failed" Toast
+
+If captures fail and you see "Capture failed":
+
+<Steps>
+  <Step title="Check permission status">
+    Open System Settings → Privacy & Security → Screen Recording and verify Text Shot is enabled.
+  </Step>
+  
+  <Step title="Restart Text Shot">
+    Quit and relaunch Text Shot. Permission changes require an app restart.
+  </Step>
+  
+  <Step title="Try a capture again">
+    Press your hotkey and select a region.
+  </Step>
+</Steps>
+
+<Tip>
+If the permission toggle is already on, try turning it **off**, waiting a second, then turning it back **on**, and restarting Text Shot.
+</Tip>
+
+### Text Shot Not Listed in Screen Recording
+
+If Text Shot doesn't appear in the Screen Recording permission list:
+
+1. **Trigger a capture first** - Press your hotkey to make macOS register the permission request
+2. **Check for alternative name** - Look for "TextShotSettings" instead of "Text Shot"
+3. **Add manually** - Use the **+** button to browse and add Text Shot
+
+### Permission Granted But Still Failing
+
+<Accordion title="Reset TCC database (advanced)">
+If permission is granted but captures still fail, you may need to reset the TCC (Transparency, Consent, and Control) database:
+
+```bash
+# Reset Screen Recording permissions for all apps (macOS 13+)
+tccutil reset ScreenCapture
+
+# Then relaunch Text Shot and grant permission again
+```
+
+<Warning>
+This resets Screen Recording permission for **all apps**, not just Text Shot. You'll need to re-grant permission to any other apps that use it.
+</Warning>
+</Accordion>
+
+<Accordion title="Check for security software interference">
+Some security software or MDM (Mobile Device Management) profiles can interfere with screen capture permissions:
+
+- Antivirus software
+- Endpoint protection
+- Corporate MDM profiles
+- Parental control software
+
+Check with your IT administrator if you're on a managed Mac.
+</Accordion>
+
+### Denial Detection
+
+Text Shot detects permission denial by analyzing error messages:
+
+```swift
+private static func isPermissionDenied(stderr: String) -> Bool {
+    let normalized = stderr.lowercased()
+    let markers = [
+        "screen recording",
+        "not authorized",
+        "not permitted",
+        "permission denied",
+        "denied by tcc"
+    ]
+    return markers.contains(where: { normalized.contains($0) })
+}
+```
+
+From `CaptureService.swift:88-98`, this checks the `screencapture` utility's error output for permission-related messages.
+
+## Privacy Considerations
+
+### What Happens to Screenshots?
+
+When you capture a screenshot with Text Shot:
+
+1. **Temporary save** - Image saved to temp directory:
+   ```swift
+   // CaptureTempStore generates unique temp file
+   ~/Library/Caches/text-shot/capture-{uuid}.png
+   ```
+
+2. **OCR processing** - Image is loaded and processed by Vision framework
+
+3. **Immediate deletion** - Image is deleted as soon as OCR completes:
+   ```swift
+   defer {
+       CaptureTempStore.shared.removeCaptureFile(atPath: path)
+   }
+   ```
+
+<Info>
+Screenshots exist on disk for typically 1-2 seconds (during OCR processing), then are permanently deleted.
+</Info>
+
+### No Cloud, No Network
+
+Text Shot never:
+
+- Uploads screenshots to the cloud
+- Sends data over the network
+- Stores screenshots permanently
+- Shares data with third parties
+
+<Note>
+All OCR processing happens on-device using Apple's Vision framework. Nothing ever leaves your Mac.
+</Note>
+
+## Permission Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Grant When Ready" icon="check">
+    Only grant Screen Recording permission when you're ready to use Text Shot. You can run the app and configure settings without permission.
+  </Card>
+  
+  <Card title="Remember to Restart" icon="rotate">
+    Always restart Text Shot after granting permission. Changes don't take effect until restart.
+  </Card>
+  
+  <Card title="Revoke Anytime" icon="ban">
+    You can revoke permission at any time in System Settings. Text Shot will stop working but no harm done.
+  </Card>
+  
+  <Card title="Regular Mac Security" icon="shield">
+    This is a standard macOS permission. Many screenshot tools, screen recorders, and utilities require it.
+  </Card>
+</CardGroup>
+
+## Understanding TCC
+
+### What is TCC?
+
+TCC (Transparency, Consent, and Control) is Apple's privacy framework that controls access to sensitive resources:
+
+- Screen Recording
+- Camera
+- Microphone  
+- Accessibility
+- Full Disk Access
+- And more
+
+<Info>
+TCC has existed since macOS 10.14 (Mojave) and has been expanded with each macOS release.
+</Info>
+
+### Why Screen Recording is Protected
+
+Screen Recording permission is powerful - it allows apps to see everything on your screen:
+
+- Sensitive documents
+- Password fields
+- Private messages
+- Banking information
+
+Apple requires explicit user consent before granting this capability.
+
+<Warning>
+Only grant Screen Recording permission to apps you trust. Text Shot is open source and you can audit the code to verify it doesn't misuse this permission.
+</Warning>

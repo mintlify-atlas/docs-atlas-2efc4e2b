@@ -1,0 +1,475 @@
+---
+title: Contributing
+description: How to contribute to Text Shot development
+icon: code-pull-request
+---
+
+Text Shot welcomes contributions from the community. Whether you're fixing bugs, adding features, or improving documentation, this guide will help you get started.
+
+## Getting Started
+
+<Steps>
+  <Step title="Fork and Clone">
+    Fork the repository on GitHub, then clone your fork:
+    
+    ```bash
+    git clone https://github.com/your-username/text-shot.git
+    cd text-shot
+    ```
+  </Step>
+
+  <Step title="Set Up Development Environment">
+    Follow the [Building from Source](/developers/building-from-source) guide to install prerequisites and build the app:
+    
+    ```bash
+    npm install
+    npm run build
+    npm start
+    ```
+  </Step>
+
+  <Step title="Create a Branch">
+    Create a feature or bugfix branch:
+    
+    ```bash
+    git checkout -b feature/your-feature-name
+    # or
+    git checkout -b fix/issue-description
+    ```
+  </Step>
+
+  <Step title="Make Changes">
+    Make your changes, following the code style and conventions outlined below.
+  </Step>
+
+  <Step title="Test Thoroughly">
+    Run the test suite and manually test your changes:
+    
+    ```bash
+    npm test
+    npm run dev
+    ```
+  </Step>
+
+  <Step title="Commit and Push">
+    Commit your changes with a clear message:
+    
+    ```bash
+    git add .
+    git commit -m "Add feature: your feature description"
+    git push origin feature/your-feature-name
+    ```
+  </Step>
+
+  <Step title="Open a Pull Request">
+    Go to GitHub and open a pull request from your branch to the main repository.
+  </Step>
+</Steps>
+
+## Code Style and Conventions
+
+Text Shot follows Swift and SwiftUI best practices:
+
+### Swift Style Guide
+
+<Accordion title="Naming Conventions">
+  - **Types**: `PascalCase` (e.g., `AppController`, `OCRService`)
+  - **Variables/functions**: `camelCase` (e.g., `runCaptureFlow`, `lastCopiedText`)
+  - **Constants**: `camelCase` (e.g., `defaultShortcut`)
+  - **Protocols**: Descriptive names ending in `-ing` for capabilities (e.g., `OCRServing`, `ClipboardWriting`)
+</Accordion>
+
+<Accordion title="Protocol-Oriented Design">
+  All services should define protocols for dependency injection:
+  
+  ```swift
+  protocol MyServiceServing {
+      func performAction() -> Result<String, Error>
+  }
+  
+  final class MyService: MyServiceServing {
+      func performAction() -> Result<String, Error> {
+          // Implementation
+      }
+  }
+  ```
+  
+  This enables testing with mock implementations.
+</Accordion>
+
+<Accordion title="Error Handling">
+  - Use `Result<T, E>` for operations that can fail gracefully
+  - Use `throws` for operations where errors should propagate
+  - Define custom error types for domain-specific failures:
+  
+  ```swift
+  enum MyServiceError: LocalizedError {
+      case invalidInput
+      case operationFailed(reason: String)
+      
+      var errorDescription: String? {
+          switch self {
+          case .invalidInput: return "Input validation failed"
+          case .operationFailed(let reason): return reason
+          }
+      }
+  }
+  ```
+</Accordion>
+
+<Accordion title="Concurrency">
+  - Mark classes that interact with UI as `@MainActor`
+  - Use `async`/`await` for asynchronous operations
+  - Always use `[weak self]` in callbacks to prevent retain cycles:
+  
+  ```swift
+  service.onComplete = { [weak self] in
+      Task { @MainActor [weak self] in
+          await self?.handleCompletion()
+      }
+  }
+  ```
+</Accordion>
+
+<Accordion title="Code Organization">
+  - One class per file
+  - Group related functionality with `// MARK: -` comments
+  - Keep files under 300 lines when possible
+  - Place protocols above the types that implement them
+</Accordion>
+
+### SwiftUI Conventions
+
+- Use `@StateObject` for view-owned models
+- Use `@EnvironmentObject` for shared app state
+- Extract complex views into separate components
+- Prefer composition over inheritance
+
+### Documentation
+
+Add doc comments for public APIs:
+
+```swift
+/// Captures a screen region selected by the user.
+///
+/// This method launches the macOS `screencapture` tool in interactive mode,
+/// allowing the user to select a region with their cursor.
+///
+/// - Returns: A `CaptureResult` containing the path to the captured image,
+///   or an error if the capture failed or was canceled.
+func captureRegion() async -> CaptureResult {
+    // ...
+}
+```
+
+## Testing Requirements
+
+All contributions must include appropriate tests.
+
+### Unit Tests
+
+Write unit tests for new services or logic:
+
+```swift
+final class MyServiceTests: XCTestCase {
+    var sut: MyService!
+    
+    override func setUp() {
+        super.setUp()
+        sut = MyService()
+    }
+    
+    override func tearDown() {
+        sut = nil
+        super.tearDown()
+    }
+    
+    func testServicePerformsAction() {
+        // Given
+        let input = "test input"
+        
+        // When
+        let result = sut.performAction(input)
+        
+        // Then
+        XCTAssertEqual(result, "expected output")
+    }
+}
+```
+
+### Testing Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Arrange-Act-Assert" icon="list-ol">
+    Structure tests with clear Given/When/Then sections.
+  </Card>
+  
+  <Card title="Test Isolation" icon="shield">
+    Each test should be independent and not rely on shared state.
+  </Card>
+  
+  <Card title="Mock External Dependencies" icon="cube">
+    Use protocol-based mocking for services that interact with the system.
+  </Card>
+  
+  <Card title="Descriptive Names" icon="tag">
+    Test names should describe what they're testing: `testCaptureFlowHandlesUserCancellation`
+  </Card>
+</CardGroup>
+
+### Running Tests
+
+Before submitting a PR, ensure all tests pass:
+
+```bash
+npm test
+```
+
+If you add new functionality, run tests multiple times to catch flaky tests:
+
+```bash
+for i in {1..5}; do npm test; done
+```
+
+### Integration Tests
+
+For complex workflows, add integration tests to `AppControllerCaptureFlowTests.swift` that exercise multiple services together.
+
+## Pull Request Process
+
+### Before Submitting
+
+<Checklist>
+  - [ ] Code builds without errors: `npm run build`
+  - [ ] All tests pass: `npm test`
+  - [ ] Type checking passes: `npm run typecheck`
+  - [ ] Code follows style conventions
+  - [ ] New functionality includes tests
+  - [ ] Public APIs have documentation comments
+  - [ ] Commit messages are clear and descriptive
+</Checklist>
+
+### PR Description Template
+
+Include the following in your pull request description:
+
+```markdown
+## Summary
+Brief description of what this PR does.
+
+## Motivation
+Why is this change needed? Link to relevant issues.
+
+## Changes
+- Bullet list of specific changes
+- New files or modified components
+- API changes (if any)
+
+## Testing
+How was this tested? Include:
+- Unit test coverage
+- Manual testing steps
+- Edge cases considered
+
+## Screenshots (if applicable)
+For UI changes, include before/after screenshots.
+
+## Checklist
+- [ ] Tests pass
+- [ ] Code follows project style
+- [ ] Documentation updated (if needed)
+```
+
+### Review Process
+
+1. **Automated Checks**: CI will run tests and verify build succeeds
+2. **Code Review**: Maintainers will review your code for:
+   - Correctness and functionality
+   - Code quality and style
+   - Test coverage
+   - Performance implications
+3. **Feedback**: Address any requested changes by pushing new commits to your branch
+4. **Merge**: Once approved, a maintainer will merge your PR
+
+<Note>
+Be patient—reviews may take a few days. Feel free to ping maintainers if there's no response after a week.
+</Note>
+
+## Issue Reporting Guidelines
+
+When reporting bugs or requesting features, please provide:
+
+### For Bugs
+
+<Steps>
+  <Step title="Search Existing Issues">
+    Check if the bug has already been reported.
+  </Step>
+
+  <Step title="Provide Version Information">
+    - Text Shot version (e.g., 2.9.0)
+    - macOS version (e.g., macOS 14.5)
+    - Whether you built from source or downloaded a release
+  </Step>
+
+  <Step title="Describe the Bug">
+    - What you expected to happen
+    - What actually happened
+    - Steps to reproduce
+  </Step>
+
+  <Step title="Include Logs (if applicable)">
+    Check Console.app for crash logs or error messages related to Text Shot.
+  </Step>
+</Steps>
+
+**Bug Report Template**:
+```markdown
+**Describe the bug**
+A clear description of what the bug is.
+
+**To Reproduce**
+1. Go to '...'
+2. Click on '...'
+3. See error
+
+**Expected behavior**
+What you expected to happen.
+
+**Environment**
+- Text Shot version: 2.9.0
+- macOS version: 14.5
+- Built from source: Yes/No
+
+**Additional context**
+Add any other context, logs, or screenshots.
+```
+
+### For Feature Requests
+
+Describe:
+- **Problem**: What problem does this solve?
+- **Proposed Solution**: How would the feature work?
+- **Alternatives**: Have you considered other approaches?
+- **Use Case**: When would you use this feature?
+
+## Security Vulnerabilities
+
+Text Shot is a local-only application with no network access, but security is still important.
+
+### Reporting Security Issues
+
+**DO NOT** open public issues for security vulnerabilities.
+
+Instead, follow the process outlined in `SECURITY.md`:
+
+<Steps>
+  <Step title="Private Reporting">
+    Use GitHub Security Advisories to report privately.
+  </Step>
+
+  <Step title="Provide Details">
+    Include:
+    - Affected version and macOS version
+    - Steps to reproduce
+    - Expected vs actual behavior
+    - Security impact assessment
+  </Step>
+
+  <Step title="Wait for Response">
+    Maintainers will respond with a fix timeline.
+  </Step>
+
+  <Step title="Coordinated Disclosure">
+    Do not publicly disclose until a fix is released.
+  </Step>
+</Steps>
+
+<Warning>
+Please allow maintainers time to address security issues before public disclosure.
+</Warning>
+
+## Code of Conduct
+
+Be respectful and constructive in all interactions. We're all here to make Text Shot better.
+
+- **Be welcoming**: Encourage new contributors
+- **Be respectful**: Disagree without being disagreeable
+- **Be collaborative**: Help others succeed
+- **Be patient**: Not everyone has the same experience level
+
+## License
+
+By contributing to Text Shot, you agree that your contributions will be licensed under the MIT License.
+
+### MIT License Summary
+
+```
+MIT License
+
+Copyright (c) 2026 Prem Sathisha Etagi
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software...
+```
+
+See `LICENSE` in the repository root for the full text.
+
+### Third-Party Licenses
+
+Text Shot bundles the KeyboardShortcuts library:
+
+- **Author**: Sindre Sorhus
+- **License**: MIT
+- **Source**: https://github.com/sindresorhus/KeyboardShortcuts
+
+See `ThirdPartyNotices.txt` for the full license text.
+
+## Agent-Assisted Development
+
+Text Shot was built using agent-assisted development with GPT-5.3-Codex. This approach:
+
+- Generated application logic through iterative prompting
+- Required human review and validation at every step
+- Enabled rapid prototyping while maintaining quality
+- Demonstrated that AI can augment, not replace, engineering judgment
+
+The author assumes full responsibility for all distributed software, regardless of how it was created.
+
+<Note>
+Contributors are free to use AI tools in their workflow, but all contributions are reviewed by human maintainers for correctness, style, and quality.
+</Note>
+
+## Resources
+
+<CardGroup cols={2}>
+  <Card title="Architecture" icon="sitemap" href="/developers/architecture">
+    Understand Text Shot's internal structure
+  </Card>
+  
+  <Card title="Building from Source" icon="hammer" href="/developers/building-from-source">
+    Set up your development environment
+  </Card>
+  
+  <Card title="Swift.org" icon="book" href="https://swift.org/documentation/">
+    Official Swift documentation
+  </Card>
+  
+  <Card title="SwiftUI Tutorials" icon="cube" href="https://developer.apple.com/tutorials/swiftui">
+    Apple's SwiftUI learning resources
+  </Card>
+</CardGroup>
+
+## Questions?
+
+If you have questions about contributing:
+
+1. Check existing issues and pull requests
+2. Read the [Architecture](/developers/architecture) documentation
+3. Open a GitHub Discussion for general questions
+4. Open an issue for specific bugs or features
+
+Welcome to the Text Shot community!
