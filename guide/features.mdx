@@ -13,7 +13,7 @@ Text Shot is a lightweight, privacy-focused screenshot-to-text utility for macOS
   </Card>
   
   <Card title="Keyboard-Driven" icon="keyboard" color="#0285c7">
-    Trigger captures with a global hotkey. No menu bar icon, no UI chrome - just pure functionality.
+    Trigger captures with a global hotkey. Minimal UI with a discreet menu bar presence for quick access.
   </Card>
   
   <Card title="Privacy-First" icon="shield-check" color="#16a34a">
@@ -68,6 +68,50 @@ Extracted text is automatically cleaned:
 
 <Info>
 The cleanup algorithm is conservative - it removes obvious noise while preserving structure.
+</Info>
+
+## Menu Bar Interface
+
+Text Shot runs as a menu bar application for quick access:
+
+### Menu Bar Icon
+
+A discreet "TS" icon appears in your menu bar (top-right corner):
+
+- Always accessible from any application
+- Click to reveal the app menu
+- No dock icon or window chrome
+
+### Menu Options
+
+Click the menu bar icon to access:
+
+```swift
+// Menu structure from AppEntry.swift:48-57
+- Capture Text         // Manually trigger a capture
+- Settings...    ⌘,    // Open Settings window
+- Quit           ⌘Q    // Exit the application
+```
+
+<Accordion title="Menu details">
+**Capture Text**
+
+Triggers a capture flow identical to using your global hotkey. Useful if you forget your hotkey or need to trigger a capture without keyboard access.
+
+**Settings... (⌘,)**
+
+Opens the Settings window where you can:
+- Customize your global hotkey
+- Toggle confirmation toast notifications
+- Enable/disable Launch at Login
+
+**Quit (⌘Q)**
+
+Completely exits Text Shot. Your settings are saved automatically. To restart, launch Text Shot from your Applications folder.
+</Accordion>
+
+<Info>
+The menu bar icon is the only visible UI element. All capture functionality is keyboard-driven - the menu is primarily for Settings access and manual capture triggering.
 </Info>
 
 ## Keyboard Shortcut System
@@ -214,14 +258,14 @@ Text Shot requires Screen Recording permission to capture screenshots, but captu
 - **CPU usage**: Near zero when not capturing
 - **Disk usage**: Settings file only (~1 KB)
 
-### No Background Processes
+### Minimal Background Footprint
 
-Text Shot doesn't run any background processes:
+Text Shot runs as a lightweight menu bar application:
 
-- No menu bar agent (unless you want one)
-- No daemon processes
+- Single process (TextShotSettings) with minimal resource use
+- No separate daemon processes
 - Hotkey registered directly with system
-- Wakes only when hotkey pressed
+- Active only when hotkey pressed or menu accessed
 
 <Tip>
 Check Activity Monitor - you'll see TextShotSettings uses minimal resources even with Launch at Login enabled.

@@ -37,7 +37,21 @@ Text Shot is distributed as a standard macOS application. Installation takes les
       If you see a warning that Text Shot is from an unidentified developer, go to **System Settings → Privacy & Security** and click "Open Anyway".
     </Note>
     
-    Text Shot will appear in your menu bar (top-right corner) with a small icon. It runs silently in the background until you trigger a capture.
+    **Auto-relocation prompt:**
+    
+    If you launch Text Shot from a location other than `/Applications/` (such as from Downloads or the mounted DMG), you'll see a helpful dialog:
+    
+    > **Move Text Shot to Applications?**
+    > 
+    > Installing Text Shot in Applications keeps it available after updates and prevents running from a temporary location.
+    
+    Click **Move to Applications** to have Text Shot automatically relocate itself, then relaunch from the correct location.
+    
+    <Info>
+    This automatic relocation feature (implemented in `AppRelocator.swift`) ensures Text Shot runs from a permanent location, which is important for features like Launch at Login to work correctly.
+    </Info>
+    
+    Text Shot will appear in your menu bar (top-right corner) with a small "TS" icon. It runs silently in the background until you trigger a capture.
   </Step>
 
   <Step title="Grant Screen Recording Permission">
