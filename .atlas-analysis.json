@@ -1,0 +1,72 @@
+{
+  "projectType": "saas",
+  "projectName": "Text Shot",
+  "projectDescription": "A lightweight macOS screenshot-to-text utility with on-device OCR for instant text extraction.",
+  "theme": "almond",
+  "primaryColor": "#5B7C99",
+  "lightColor": "#E8F0F7",
+  "darkColor": "#2C3E50",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "User Guide",
+            "pages": [
+              "guide/usage",
+              "guide/features",
+              "guide/permissions",
+              "guide/settings",
+              "guide/keyboard-shortcuts"
+            ]
+          },
+          {
+            "group": "Developer Guide",
+            "pages": [
+              "developers/building-from-source",
+              "developers/architecture",
+              "developers/contributing"
+            ]
+          },
+          {
+            "group": "Reference",
+            "pages": [
+              "reference/troubleshooting",
+              "reference/faq",
+              "reference/security"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "On-device OCR using Apple Vision framework",
+    "Keyboard-driven screenshot capture workflow",
+    "Zero network access - fully local processing",
+    "Lightweight menu bar application (~2 MB)",
+    "Customizable global hotkeys",
+    "Launch at login support",
+    "Automatic clipboard integration",
+    "Screen Recording permission management"
+  ],
+  "publicApiSurface": [
+    "AppController - Main application controller with capture flow orchestration",
+    "OCRService - Vision-based text recognition with retry logic",
+    "CaptureService - Screen region capture via screencapture utility",
+    "HotkeyManager - Global keyboard shortcut registration and handling",
+    "SettingsStoreV2 - Persistent user settings storage",
+    "ClipboardService - System clipboard integration",
+    "LaunchAtLoginService - Login item management",
+    "ScreenCapturePermissionService - Screen Recording permission checks"
+  ]
+}
